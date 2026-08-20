@@ -1,0 +1,6 @@
+# 设计文档暂不入库
+docs/superpowers/
+
+node_modules/
+.DS_Store
+*.log
