@@ -55,6 +55,11 @@ MetaBoard 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness
 
 ## 怎么做的
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
+  <img alt="架构:MetaBoard 的工具和评审写入器产生核心会话事件,共享的会话装配器供给 Chat、Trajectory、MetaBoard 三套 Definition,各自渲染自己的标签页" src="docs/assets/architecture-light.svg" width="100%">
+</picture>
+
 MetaBoard 是一个普通的、仓库外的 npm 包，两半：
 
 **host 半**注册内容生产工具。每次调用产生核心的 `tool/call` 和 `tool/result` 事件，

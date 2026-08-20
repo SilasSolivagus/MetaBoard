@@ -63,6 +63,11 @@ derived from, how long it took.
 
 ## How it works
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
+  <img alt="Architecture: MetaBoard tools and a review writer emit core session events; the shared conversation assembler feeds Chat, Trajectory, and MetaBoard definitions, each rendering its own tab" src="docs/assets/architecture-light.svg" width="100%">
+</picture>
+
 MetaBoard ships as an ordinary out-of-repo npm package with two halves:
 
 **Host half** registers content-production tools. Each call produces the core `tool/call` and
