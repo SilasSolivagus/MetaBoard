@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 680" width="960" height="680" role="img" aria-label="A content production trajectory with derivation edges">
+  <defs>
+    <marker id="mb-blue" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#4176E6"/>
+    </marker>
+    <marker id="mb-rose" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#B5657A"/>
+    </marker>
+  </defs>
+  <style>text{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif} .m{font-family:'SF Mono', 'JetBrains Mono', 'Fira Code', Menlo, Consolas, 'PingFang SC', monospace}</style>
+  <rect width="960" height="680" fill="#ffffff"/>
+  <text x="36" y="48" font-size="19" font-weight="600" fill="#0F1115">A content trajectory</text>
+  <text x="36" y="70" font-size="13" fill="#61666B">Same assembler as a coding agent&#8217;s trajectory. Different domain.</text>
+  <line x1="76" y1="104" x2="730" y2="104" stroke="#E3E6EA" stroke-width="1"/>
+  <text x="76" y="96" font-size="12.5" font-weight="600" fill="#0F1115">Turn 1 · Draft</text>
+  <text x="730" y="96" text-anchor="end" font-size="11" class="m" fill="#979DA6">12:04:11 · 4m12s</text>
+  <line x1="76" y1="346" x2="730" y2="346" stroke="#E3E6EA" stroke-width="1"/>
+  <text x="76" y="338" font-size="12.5" font-weight="600" fill="#0F1115">Human review</text>
+  <text x="730" y="338" text-anchor="end" font-size="11" class="m" fill="#979DA6">12:19:38</text>
+  <line x1="76" y1="448" x2="730" y2="448" stroke="#E3E6EA" stroke-width="1"/>
+  <text x="76" y="440" font-size="12.5" font-weight="600" fill="#0F1115">Turn 2 · Revise</text>
+  <text x="730" y="440" text-anchor="end" font-size="11" class="m" fill="#979DA6">12:21:02 · 1m50s</text>
+  <path d="M 730,226 H 756 V 272 H 734" fill="none" stroke="#4176E6" stroke-width="1.4" marker-end="url(#mb-blue)"/>
+  <text x="768" y="253" font-size="11" class="m" fill="#4176E6">sources 01 · 02 · 06</text>
+  <path d="M 730,298 H 782 V 478 H 734" fill="none" stroke="#4176E6" stroke-width="1.4" marker-end="url(#mb-blue)"/>
+  <text x="794" y="392" font-size="11" class="m" fill="#4176E6">draft v1</text>
+  <path d="M 76,394 H 52 V 500 H 72" fill="none" stroke="#B5657A" stroke-width="1.4" marker-end="url(#mb-rose)"/>
+  <path d="M 730,508 H 756 V 556 H 734" fill="none" stroke="#4176E6" stroke-width="1.4" marker-end="url(#mb-blue)"/>
+  <text x="768" y="536" font-size="11" class="m" fill="#4176E6">final text</text>
+  <rect x="76" y="118" width="654" height="54" rx="7" fill="#ffffff" stroke="#E3E6EA" stroke-width="1"/>
+  <rect x="76" y="118" width="3" height="54" rx="1.5" fill="#B5657A"/>
+  <rect x="92" y="135" width="74" height="20" rx="4" fill="#FAF1F3"/>
+  <text x="129" y="149" text-anchor="middle" font-size="9.5" class="m" letter-spacing="0.7" fill="#B5657A">INPUT</text>
+  <text x="184" y="150" font-size="13" fill="#0F1115">Write a piece on urban night running, for commuters aged 25–35</text>
+  <text x="714" y="150" text-anchor="end" font-size="11" class="m" fill="#979DA6">Li Ming</text>
+  <rect x="76" y="188" width="654" height="54" rx="7" fill="#ffffff" stroke="#E3E6EA" stroke-width="1"/>
+  <rect x="76" y="188" width="3" height="54" rx="1.5" fill="#4176E6"/>
+  <rect x="92" y="205" width="74" height="20" rx="4" fill="#EDF3FE"/>
+  <text x="129" y="219" text-anchor="middle" font-size="9.5" class="m" letter-spacing="0.7" fill="#4176E6">RESEARCH</text>
+  <text x="184" y="212" font-size="12.5" class="m" fill="#0F1115">metaboard.research</text>
+  <text x="184" y="229" font-size="11" fill="#979DA6">same topic · last 30 days · sources kept in meta.payload</text>
+  <text x="714" y="220" text-anchor="end" font-size="11" class="m" fill="#979DA6">1.8s · 20 items</text>
+  <rect x="76" y="258" width="654" height="54" rx="7" fill="#ffffff" stroke="#E3E6EA" stroke-width="1"/>
+  <rect x="76" y="258" width="3" height="54" rx="1.5" fill="#4176E6"/>
+  <rect x="92" y="275" width="74" height="20" rx="4" fill="#EDF3FE"/>
+  <text x="129" y="289" text-anchor="middle" font-size="9.5" class="m" letter-spacing="0.7" fill="#4176E6">DRAFT</text>
+  <text x="184" y="282" font-size="12.5" class="m" fill="#0F1115">metaboard.draft</text>
+  <text x="184" y="299" font-size="11" fill="#979DA6">full text in meta.payload</text>
+  <text x="714" y="290" text-anchor="end" font-size="11" class="m" fill="#979DA6">22.4s · 2,431 words</text>
+  <rect x="76" y="360" width="654" height="54" rx="7" fill="#ffffff" stroke="#E3E6EA" stroke-width="1"/>
+  <rect x="76" y="360" width="3" height="54" rx="1.5" fill="#B5657A"/>
+  <rect x="92" y="377" width="74" height="20" rx="4" fill="#FAF1F3"/>
+  <text x="129" y="391" text-anchor="middle" font-size="9.5" class="m" letter-spacing="0.7" fill="#B5657A">REJECT</text>
+  <text x="184" y="392" font-size="13" fill="#0F1115">Lede is flat — open with the data. Cut the price list in §3.</text>
+  <text x="714" y="392" text-anchor="end" font-size="11" class="m" fill="#979DA6">Li Ming</text>
+  <rect x="76" y="462" width="654" height="54" rx="7" fill="#ffffff" stroke="#E3E6EA" stroke-width="1"/>
+  <rect x="76" y="462" width="3" height="54" rx="1.5" fill="#4176E6"/>
+  <rect x="92" y="479" width="74" height="20" rx="4" fill="#EDF3FE"/>
+  <text x="129" y="493" text-anchor="middle" font-size="9.5" class="m" letter-spacing="0.7" fill="#4176E6">REVISE</text>
+  <text x="184" y="486" font-size="12.5" class="m" fill="#0F1115">metaboard.revise</text>
+  <text x="184" y="503" font-size="11" fill="#979DA6">diff in meta.payload</text>
+  <text x="714" y="494" text-anchor="end" font-size="11" class="m" fill="#979DA6">31.2s · +180 / −95</text>
+  <rect x="76" y="532" width="654" height="54" rx="7" fill="#ffffff" stroke="#E3E6EA" stroke-width="1"/>
+  <rect x="76" y="532" width="3" height="54" rx="1.5" fill="#4176E6"/>
+  <rect x="92" y="549" width="74" height="20" rx="4" fill="#EDF3FE"/>
+  <text x="129" y="563" text-anchor="middle" font-size="9.5" class="m" letter-spacing="0.7" fill="#4176E6">PUBLISH</text>
+  <text x="184" y="556" font-size="12.5" class="m" fill="#0F1115">metaboard.publish</text>
+  <text x="184" y="573" font-size="11" fill="#979DA6">Xiaohongshu</text>
+  <text x="714" y="564" text-anchor="end" font-size="11" class="m" fill="#979DA6">posted</text>
+  <line x1="36" y1="600" x2="924" y2="600" stroke="#E3E6EA" stroke-width="1"/>
+  <path d="M 36,622 H 66" fill="none" stroke="#4176E6" stroke-width="1.4" marker-end="url(#mb-blue)"/>
+  <text x="76" y="626" font-size="11.5" fill="#61666B">derived from — model-originated, carried on <tspan class="m" fill="#0F1115">tool/result.meta</tspan></text>
+  <path d="M 500,622 H 530" fill="none" stroke="#B5657A" stroke-width="1.4" marker-end="url(#mb-rose)"/>
+  <text x="540" y="626" font-size="11.5" fill="#61666B">human-originated, carried on <tspan class="m" fill="#0F1115">user/message</tspan></text>
+</svg>

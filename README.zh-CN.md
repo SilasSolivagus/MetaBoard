@@ -41,27 +41,13 @@ MetaBoard 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness
 
 ### 内容轨迹长什么样
 
-```
-轮次 1 · 起稿                                        12:04:11 · 4分12秒
-  输入       写一篇关于城市夜跑的稿子,面向 25–35 岁通勤族
-  步骤 1     检索素材
-  检索       metaboard.research · 同题材近 30 天              1.8s · 20 条
-             ├ 《凌晨四点的城市属于谁》          钩子 / 冲突 / 反转
-             ├ 《我用夜跑治好了失眠》            数据开场 / 案例 / 呼吁
-             └ …另外 17 条
-  步骤 2     起稿
-  起稿       metaboard.draft                            22.4s · 2431 字
-             ← 来自 素材 01、02、06
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/trajectory-dark.svg">
+  <img alt="内容轨迹:两个轮次的工具调用,中间夹一次人工评审,蓝色派生边显示每个产物来自哪些上游" src="docs/assets/trajectory-light.svg" width="100%">
+</picture>
 
-人工评审                                                      12:19:38
-  打回       开头太平,换成数据开场;第三段的价格清单删掉
-
-轮次 2 · 改稿                                        12:21:02 · 1分50秒
-  步骤 1     按意见改稿
-  改稿       metaboard.revise                           31.2s · +180 / −95
-             ← 来自 稿件 v1、评审意见
-  发布       metaboard.publish · 小红书                          已发布
-```
+竖向顺序是时间。蓝色的边是看板表达不了的东西:这一稿来自哪几条素材、这一版改的是哪一稿。
+它们不是推断出来的——每个工具在自己的结果里就记下了。
 
 选中一行打开完整载荷：检索到的素材、稿件全文、它从哪几条来、花了多久。
 

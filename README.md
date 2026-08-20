@@ -47,27 +47,14 @@ different domain.
 
 ### What a content trajectory looks like
 
-```
-Turn 1 · Draft                                        12:04:11 · 4m12s
-  input      Write a piece on urban night running, for commuters aged 25–35
-  step 1     Gather sources
-  research   metaboard.research · same topic, last 30 days    1.8s · 20 items
-             ├ "Who Owns the City at 4 A.M."      hook / conflict / reversal
-             ├ "Night Runs Cured My Insomnia"     data lede / case / call
-             └ …17 more
-  step 2     Draft
-  draft      metaboard.draft                              22.4s · 2,431 words
-             ← derived from source 01, 02, 06
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/trajectory-dark.svg">
+  <img alt="A content trajectory: two turns of tool calls with a human review between them, and blue derivation edges showing which sources each artifact came from" src="docs/assets/trajectory-light.svg" width="100%">
+</picture>
 
-Human review                                                    12:19:38
-  reject     Lede is flat — open with the data. Cut the price list in §3.
-
-Turn 2 · Revise                                       12:21:02 · 1m50s
-  step 1     Apply review
-  revise     metaboard.revise                             31.2s · +180 / −95
-             ← derived from draft v1, review
-  publish    metaboard.publish · Xiaohongshu                        posted
-```
+The vertical order is time. The blue edges are what a task board cannot express: which
+sources the draft came from, which draft the revision rewrote. They are not inferred — each
+tool records them on its own result.
 
 Selecting a row opens the full payload: the retrieved sources, the complete draft, what it was
 derived from, how long it took.
