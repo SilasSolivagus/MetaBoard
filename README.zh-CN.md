@@ -42,8 +42,8 @@ MetaBoard 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness
 ### 内容轨迹长什么样
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/trajectory-dark.svg">
-  <img alt="内容轨迹:两个轮次的工具调用,中间夹一次人工评审,蓝色派生边显示每个产物来自哪些上游" src="docs/assets/trajectory-light.svg" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/trajectory-zh-dark.svg">
+  <img alt="内容轨迹:两个轮次的工具调用,中间夹一次人工评审,蓝色派生边显示每个产物来自哪些上游" src="docs/assets/trajectory-zh-light.svg" width="100%">
 </picture>
 
 竖向顺序是时间。蓝色的边是看板表达不了的东西:这一稿来自哪几条素材、这一版改的是哪一稿。
@@ -56,8 +56,8 @@ MetaBoard 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness
 ## 怎么做的
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
-  <img alt="架构:MetaBoard 的工具和评审写入器产生核心会话事件,共享的会话装配器供给 Chat、Trajectory、MetaBoard 三套 Definition,各自渲染自己的标签页" src="docs/assets/architecture-light.svg" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-zh-dark.svg">
+  <img alt="架构:MetaBoard 的工具和评审写入器产生核心会话事件,共享的会话装配器供给 Chat、Trajectory、MetaBoard 三套 Definition,各自渲染自己的标签页" src="docs/assets/architecture-zh-light.svg" width="100%">
 </picture>
 
 MetaBoard 是一个普通的、仓库外的 npm 包，两半：
