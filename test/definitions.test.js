@@ -175,7 +175,7 @@ test('client 半内联的信封判据与 envelope.js 一致,逐个 kind 比对',
     null, undefined, 'draft', 7,
   ]
   for (const meta of metas) {
-    const match = { event: { time: 1, data: { meta, error: undefined } } }
+    const match = { event: { time: 1, data: resultData('c1', { meta }) } }
     const next = call.update({ state: { status: 'running' } }, match)
     assert.equal(
       'contentKind' in next, isMetaBoardMeta(meta),
@@ -189,7 +189,7 @@ test('业务失败没有传输错误,status 仍然是 failed', () => {
   const meta = { subject: 's', kind: 'revise', payload: { added: 0, removed: 0, error: 'boom' } }
   const next = call.update(
     { state: { status: 'running' } },
-    { event: { time: 1, data: { meta, error: undefined } } },
+    { event: { time: 1, data: resultData('c1', { meta }) } },
   )
   assert.equal(next.status, 'failed')
   assert.equal(next.payload.error, 'boom')
@@ -200,7 +200,7 @@ test('业务成功且没有传输错误,status 是 done', () => {
   const meta = { subject: 's', kind: 'revise', payload: { added: 3, removed: 1 } }
   const next = call.update(
     { state: { status: 'running' } },
-    { event: { time: 1, data: { meta, error: undefined } } },
+    { event: { time: 1, data: resultData('c1', { meta }) } },
   )
   assert.equal(next.status, 'done')
 })
@@ -413,13 +413,39 @@ const wrap = (/** @type {string} */ type, /** @type {any} */ data) =>
   ({ event: { seq: ++seq, type, time: 1000 + seq, data }, view: undefined })
 const toolCall = (/** @type {string} */ name, /** @type {string} */ callId) =>
   wrap('tool/call', { turn: 1, step: 1, callId, name, arguments: '{}' })
+/**
+ * 真实形状的 tool/result 事件 data —— 唯一的形状权威,别处不再手写。
+ *
+ * 失败有两个互相独立的落点:dsh-tools 的 toolErrorResult 只在 result.error?.info
+ * 存在时才写出 data.error(lib/index.js:3483 的 `...info ? { info } : {}`),
+ * 而 ToolArgsError 没有 info,于是参数校验失败的事件根本没有 data.error,
+ * 只有 message 内容块上的 isError: true。会话日志实测的原始事件见
+ * docs/phase-1-acceptance.md「意外发现」第 1 条(seq 2428)。
+ */
+const resultData = (
+  /** @type {string} */ callId,
+  /** @type {{ meta?: any, error?: any, isError?: boolean, text?: string }} */ options = {},
+) => ({
+  turn: 1, step: 1,
+  message: {
+    role: 'user',
+    source: { kind: 'tool', callId },
+    content: [{
+      type: 'tool-result', toolCallId: callId,
+      content: [{ type: 'text', text: options.text ?? 'ok' }],
+      isError: options.isError ?? false,
+    }],
+  },
+  ...(options.meta === undefined ? {} : { meta: options.meta }),
+  ...(options.error === undefined ? {} : { error: options.error }),
+})
 const toolResult = (/** @type {string} */ callId, /** @type {any} */ meta = undefined, /** @type {any} */ error = undefined) =>
-  wrap('tool/result', {
-    turn: 1, step: 1,
-    message: { role: 'user', content: [{ type: 'tool-result', toolCallId: callId, content: [] }], source: { kind: 'tool' } },
-    ...(meta === undefined ? {} : { meta }),
-    ...(error === undefined ? {} : { error }),
-  })
+  wrap('tool/result', resultData(callId, { meta, error }))
+/** 参数校验失败的结果:没有 meta、没有 data.error,失败只写在内容块的 isError 上。 */
+const argsErrorResult = (/** @type {string} */ callId) =>
+  wrap('tool/result', resultData(callId, {
+    isError: true, text: 'Error: invalid arguments: missing required property "notes"',
+  }))
 const reviewMessage = () => wrap('user/message', {
   role: 'user',
   content: [{ type: 'text', text: '[人工评审 · reject] 开头太平' }],
@@ -443,15 +469,36 @@ test('装配器接受两个 Definition:一次带信封的调用装出一行', ()
   }])
 })
 
-test('缺信封的 tool/result 仍然给这一行收尾,不会永远停在 running', () => {
+test('参数校验失败(缺信封)收尾为 failed —— 失败信号只在 isError 上(R19)', () => {
+  // 这个测试此前用的是 { error: { name: 'ToolArgsError' } } 这种系统从不产出的
+  // 形状,于是它一直是绿的,而真实会话里这一行被标成 done。现在用实测形状:
+  // 没有 meta、没有 data.error,只有内容块上的 isError。
   const h = harness()
   h.asm.append(toolCall('metaboard_draft', 'd2'))
   h.asm.flush()
-  h.asm.append(toolResult('d2', undefined, { name: 'ToolArgsError', code: 'TOOL_ARGS' }))
+  h.asm.append(argsErrorResult('d2'))
   h.asm.flush()
   const row = h.data()[0]
   assert.equal(row.status, 'failed')
   assert.equal(row.contentKind, undefined)
+})
+
+test('带信封但内容块 isError 的结果也是 failed(R19)', () => {
+  const h = harness()
+  h.asm.append(toolCall('metaboard_draft', 'd4'))
+  h.asm.flush()
+  h.asm.append(wrap('tool/result', resultData('d4', { meta: DRAFT_META, isError: true })))
+  h.asm.flush()
+  assert.equal(h.data()[0].status, 'failed')
+})
+
+test('带 data.error 的结果仍然是 failed —— R19 只是加宽证据,没有换掉证据', () => {
+  const h = harness()
+  h.asm.append(toolCall('metaboard_draft', 'd5'))
+  h.asm.flush()
+  h.asm.append(toolResult('d5', undefined, { name: 'ToolExecutionError', info: { code: 'X' } }))
+  h.asm.flush()
+  assert.equal(h.data()[0].status, 'failed')
 })
 
 test('别的工具的 tool/result 被认领但不产出任何节点', () => {

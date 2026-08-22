@@ -9,13 +9,13 @@ dsh 版本：0.1.0-rc.6（`dsh --version`，系统安装，按 Ruling R2'）
 | # | 判据 | 结果 | 证据 |
 |---|---|---|---|
 | 1 | 仓库外的包能被加载,工具调得到,tab 出现 | 成立 | profile `metaboard-dev` 以 `link:/Users/silas/MetaBoard` 装入，仓库不在 dsh 源码树内。会话里四个工具全部被模型直接调用成功（seq 306/1606/1741/2000）；会话头部出现第三个标签页「内容轨迹」，与「对话」「轨迹」并列。浏览器 console 无插件相关报错。 |
-| 2 | 存盘重开轨迹完整,不抛 SessionFormatUnsupportedError | 成立 | 真的杀掉进程重启了两次（PID 51388 → 52189 → 52281），每次都重新打开同一个会话。账本三次读数完全一致：5 行、渲染文本合计 191,758 字符（重启前后逐字符相同）。两份服务端日志 `grep -ci SessionFormat` 均为 0；重启后浏览器 console 只有杀进程窗口期的 `ERR_CONNECTION_REFUSED` / WebSocket 断连，重连后无报错。 |
-| 3 | 阶段(turn) → 步骤(step) → 工具调用 三层可见 | 成立（有一处缺口） | 每一行的首行是 `metaboard_draft · done · turn 1 / step 2`，turn、step、工具调用三层都在行上直接可读；实测四次调用分别落在 turn 1 的 step 1/2/3/4，第二轮追问落在 turn 2 step 1，第三轮落在 turn 3 step 1。缺口：人工评审行（来自 `user/message`）没有 turn / step —— `reviewDefinition.start` 的 state 只有 `seq/at/summary/text`，事件本身带 turn/step 但没有被取出来。 |
+| 2 | 存盘重开轨迹完整,不抛 SessionFormatUnsupportedError | 成立 | 真的杀掉进程重启了三次（PID 51388 → 52189 → 52281 → 54322），每次都重新打开同一个会话。前两次之间账本读数逐字符一致：5 行、渲染文本合计 191,758 字符；第三次重启（R19 修复后）同样完整重放出当时全部 6 行。三份服务端日志 `grep -ci SessionFormat` 均为 0；重启后浏览器 console 只有杀进程窗口期的 `ERR_CONNECTION_REFUSED` / WebSocket 断连，重连后无报错。 |
+| 3 | 阶段(turn) → 步骤(step) → 工具调用 三层可见 | 成立（有一处缺口） | 每一行的首行是 `metaboard_draft · done · turn 1 / step 2`，turn、step、工具调用三层都在行上直接可读；实测四次调用分别落在 turn 1 的 step 1/2/3/4，第二轮追问落在 turn 2 step 1，第三轮落在 turn 3 step 1。缺口：人工评审行（来自 `user/message`）没有 turn / step。核对日志原文后确认这不是漏取 —— 那条事件（seq 1747）的 `data` 里就没有 `turn`/`step` 两个字段（`tool/call`、`tool/result` 有，`user/message` 没有）。判据 3 在工具调用行上完整成立，在评审行上缺这两层。 |
 | 4 | derivedFrom 解析成引用关系 | 成立 | draft 行显示 `derivedFrom: research(call_00_L120td14XkvDrOdyvDBE1259)`；revise 行显示 `derivedFrom: draft(call_00_YLMRM6abKdeFPmnWrbwe8160), review(call_00_W0yAcq3vxqu5Gv7HxnqF8445)` —— 两条都是 `resolved: true`，其中对 review 的那条正是 R18 修复前结构性不可解析的引用，本次现场确认已解析。模型在无人工喂 id 的情况下自己填对了三处 derivedFrom。 |
 | 5 | 50KB 级 meta 进得去出得来 | 成立 | draft 的 `tool/result.meta` 在持久化日志里是 560,596 字节（模型写了约 939 字提纲，工具扩写 200 倍）。两次进程重启后重新打开会话，渲染出的那一行 DOM 文本 190,888 字符 / 560,488 字节，`JSON.parse` 回来 `draft` 字段 187,800 字符、`wordCount` 字段与之相符，未被截断。前序任务在日志层的记录是 93,479 字节，这次把它一路验到了渲染层。 |
-| 6 | 失败的调用渲染成完整失败记录,不留 running 僵尸行 | **部分成立** | **带信封的业务失败：成立。** 行渲染为 `metaboard_revise · failed · turn 3 / step 1`，带 `derivedFrom: draft(...)`，payload 显示 `{"added":0,"removed":0,"callId":"call_00_ET_4ACYILsq4H9baenZEMv43857","error":"injected failure for acceptance criterion 6"}`；日志里该 `tool/result` 的 `isError` 为 false、`data.error` 为空，信封完整（工具没抛异常，这正是 Task 4 的契约）。**缺信封的参数校验失败：不成立。** 行确实收尾了（不是僵尸 running），但被标成 **done**：`metaboard_revise · done · turn 2 / step 1`，正文 `(此次调用没有信封)`。详见下文「意外发现」第 1 条。 |
+| 6 | 失败的调用渲染成完整失败记录,不留 running 僵尸行 | 成立（经 Ruling R19 修复后） | **带信封的业务失败：** 行渲染为 `metaboard_revise · failed · turn 3 / step 1`，带 `derivedFrom: draft(...)`，payload 显示 `{"added":0,"removed":0,"callId":"call_00_ET_4ACYILsq4H9baenZEMv43857","error":"injected failure for acceptance criterion 6"}`；日志里该 `tool/result` 的 `isError` 为 false、`data.error` 为空，信封完整（工具没抛异常，这正是 Task 4 的契约）。**缺信封的参数校验失败：** 初次验收时这一半不成立 —— 行虽然收了尾（不是僵尸 running），却被标成 `done`。按 R19 把失败证据从只读 `data.error` 加宽到「`data.error` / `message.content[0].isError` / `payload.error` 三者任一」之后重验：同一批持久化事件重放出来的那一行变成 `metaboard_revise · failed · turn 2 / step 1`，新发起的一次漏参调用（`metaboard_draft` 缺 `outline`，日志 seq 2755，`isError: true`、无 `data.error`、无 `meta`）实时追加为 `metaboard_draft · failed · turn 4 / step 1`。两条路径现在都成立。 |
 
-## 判据 6 的失败是怎么造出来的
+## 判据 6 的两条失败路径是怎么造出来的
 
 `metaboard_revise` 的 `failForTest` 开关在 Task 4 的修复轮里按 Ruling R11 删掉了 ——
 它是模型可达的伪造失败记录的入口。删掉之后，四个工具里没有任何一条模型或用户可以
@@ -33,7 +33,25 @@ dsh 版本：0.1.0-rc.6（`dsh --version`，系统安装，按 Ruling R2'）
    是因为它跑的正是生产代码的 `catch` 分支 → 返回带 `error` 的值 → `presentationMeta`
    照常执行 → 信封落盘，链路一字未改；而它不进 schema，模型够不着，不违反 R11。
    验证结束后 `git checkout lib/tools/revise.js` 还原，`git status` 干净，`npm test`
-   重跑 42/42。**这段注入代码没有进任何 commit。**
+   重跑全绿。**这段注入代码没有进任何 commit。**
+
+**给后来者的提醒：不要去工具的参数表里找失败开关，那里没有。**
+`metaboard_revise` 曾经有一个 `failForTest` 参数，Task 4 用它演示过失败路径，
+Ruling R11 把它删掉了 —— 它随工具定义发给模型，任何人让 agent「测一下 revise」
+都能往真实会话的持久化日志里注入一条与真实失败无法区分的伪造记录，而 Task 6 之后
+读的正是这些记录。代价就是本节这套办法：带信封的失败只能靠临时注入一次异常来验，
+不可重复执行；可重复的部分由单测覆盖（`status` 折叠的三种证据、失败行渲染）。
+
+### 4.3 R19：修复与复验
+
+初次验收暴露的问题是 `callDefinition.update` 只把 `data.error` 当作传输失败的证据。
+按 Ruling R19 改为三种证据任一成立即判 `failed`：`data.error` 存在、
+`message.content[0].isError` 为真、`payload.error` 存在。R16 的语义没有变
+（账本说的仍是「这步活干成没有」），变的是它读的证据面。
+
+同时重写了那条把问题遮住的单测（详见 task-8 报告的 RED/GREEN 记录）：它此前构造的
+事件把错误挂在 `data.error` 上 —— 系统在这条路径上从不产出这种形状，所以测试一直
+是绿的，而真实会话里那一行是错的。
 
 ## 结论
 
@@ -51,8 +69,11 @@ dsh 版本：0.1.0-rc.6（`dsh --version`，系统安装，按 Ruling R2'）
    教训：任何在数据层「为了不显示」而丢弃节点的做法，都会让引用结构性地无法解析。
    抑制必须留在呈现层（本任务按 `referenceOnly` 标记过滤）。
 
-3. **status 的语义要在 Definition 里折叠好。** R16 把业务失败折进 `status`，下游渲染
-   才默认是对的。但这次发现折叠没折全（见下），说明这条条件目前只满足了一半。
+3. **status 的语义要在 Definition 里折叠好，而且要把宿主所有的失败落点都读全。**
+   R16 把业务失败折进 `status`，下游渲染才默认是对的；这次验收发现折叠漏了宿主的
+   另一个失败落点（`message.content[0].isError`），R19 补上。教训是：一个「成没成」
+   的字段，值多少取决于它读了几处证据 —— 少读一处，账本就会在那一类失败上说谎，
+   而且是安静地说谎。
 
 除去这三条，本阶段没有为了跑通内容生产而改动装配器的任何行为，也没有向 Definition
 里塞入任何编码语义：两个 Definition 的 `match` 只看事件类型、工具名前缀和消息来源，
@@ -85,10 +106,13 @@ dsh 版本：0.1.0-rc.6（`dsh --version`，系统安装，按 Ruling R2'）
    在真实系统里不存在：那条路径真实的信号是 `isError`。测试因此一直是绿的，
    而真实会话里是红的。
 
-   修法看起来是一行（在缺信封分支里同时读 `message.content[0].isError`），
-   但它改的是 Task 6 的 Definition 语义，且需要同步修那条建立在错误形状上的单测，
-   已超出本任务「渲染 + 验收」的范围，按标准规则原样上报，不自行改动。
-   在修掉之前，判据 6 只在「工具产出了信封」这一半成立。
+   **已按 Ruling R19 修复**（`hasTransportError` 同时读 `data.error` 与
+   `message.content[0].isError`，与 `payload.error` 一起构成三种失败证据）。
+   控制者核对框架源码确认了成因：`toolErrorResult` 只在 `result.error?.info` 存在时
+   才写出 `info`（`dsh-tools/lib/index.js:3483` 的 `...info ? { info } : {}`），
+   而 `ToolArgsError` 没有 `info`，所以这条路径的 `data.error` 根本不会被写出。
+   那条建立在虚构形状上的单测已改用实测形状重写，并先验证它对修复前的代码变红、
+   对修复后变绿。
 
 2. **brief 里的槽位注册方式读不到后续更新。** brief 给的写法是在 `inject` 里
    `ctx.sessions.binding(sessionId).session`，再在渲染函数里 `session.getSnapshot()`。
@@ -97,10 +121,13 @@ dsh 版本：0.1.0-rc.6（`dsh --version`，系统安装，按 Ruling R2'）
    `useSession`，`props.useSession(s => s.views.get("metaboard"))`。现场证据是判据 6
    那一行 —— 它是在没有刷新页面的情况下自己出现在账本里的。
 
-3. **人工评审行没有 turn / step。** `user/message` 事件带 `turn`/`step`，但
-   `reviewDefinition.start`（Task 6）只取了 `seq/at/summary/text`。判据 3 在工具调用行
-   上完全成立，在评审行上缺这两个字段。不影响引用解析，只影响「三层可见」在评审行
-   上的完整度。
+3. **人工评审行没有 turn / step —— 而且不是漏取，是事件里就没有。**
+   我最初以为是 `reviewDefinition.start`（Task 6）只取了 `seq/at/summary/text`
+   而漏掉了这两个字段，核对会话日志原文后更正：评审那条 `user/message`（seq 1747）
+   的 `data` 只有 `content` / `source` / `role` / `id`，**没有 `turn`，也没有 `step`**
+   ——`tool/call` 和 `tool/result` 有，`user/message` 没有。所以这不是取不取的问题，
+   要让评审行显示 turn/step，只能从相邻事件或它自己那次 `metaboard_review` 调用行
+   推断。判据 3 在工具调用行上完全成立，在评审行上缺这两层，如实记在这里。
 
 4. **计划阶段的裁决 F3 被现场证实是必要的。** brief 的渲染统一读 `r.data.payload`，
    而评审行的 state 里根本没有 `payload`。按 F3 分支渲染（调用行读 `payload`、
