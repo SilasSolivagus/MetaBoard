@@ -1,0 +1,7 @@
+# 安装进 profile 时,loader 把这一层叠加到 profile 的根条目列表上。
+# inject 列表让 loader 等这些服务就绪后再激活插件。
+- insert:
+    - id: metaboard
+      name: 'metaboard'
+      inject:
+        - tools
