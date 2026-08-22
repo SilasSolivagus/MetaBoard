@@ -14,6 +14,12 @@ test('makeMeta 保留 derivedFrom', () => {
   assert.deepEqual(m.derivedFrom, ['c1'])
 })
 
+test('makeMeta 对不在 KINDS 里的 kind 抛错', () => {
+  assert.throws(() => {
+    makeMeta({ subject: 'topic:a', kind: 'nope', payload: {} })
+  })
+})
+
 test('isMetaBoardMeta 只认结构完整的信封', () => {
   assert.equal(isMetaBoardMeta({ subject: 'topic:a', kind: 'draft', payload: {} }), true)
   assert.equal(isMetaBoardMeta({ subject: 'topic:a', kind: 'draft' }), false)
