@@ -319,6 +319,51 @@ test('buildSnapshot: apply 增量追加后,之前 unresolved 的引用重新解�
   assert.deepEqual(row.refs, [{ id: 'c1', resolved: true, kind: 'research', tool: 'metaboard_research' }])
 })
 
+// R18:revise 对 review 的引用曾经结构性地永远无法解析 —— metaboard_review 的
+// 工具调用节点被 buildViewNode 抑制成 null,从不到达 buildSnapshot,它的 callId
+// 永远进不了 byCall 索引。修法是抑制挪到呈现层(referenceOnly 标记),节点照常产出。
+// 这里用 buildSnapshot 收到的节点形状直接钉住:review 的工具调用节点存在、
+// 带 referenceOnly: true,revise 对它的引用能解析。
+
+test('buildSnapshot: revise 对 review 的引用现在能解析(R18),review 的工具调用行标记 referenceOnly 但仍在 rows 里', () => {
+  const { view } = loadDefinitions()
+  const builder = view.create()
+  const reviewCallNode = {
+    key: 'k-review', kind: 'metaboard-call', id: 'rc1', target: 'metaboard',
+    data: {
+      callId: 'rc1', tool: 'metaboard_review', status: 'done', subject: 'topic:x',
+      contentKind: 'review', derivedFrom: [], payload: { decision: 'reject' }, referenceOnly: true,
+    },
+  }
+  const reviseNode = {
+    key: 'k-revise', kind: 'metaboard-call', id: 'rv1', target: 'metaboard',
+    data: {
+      callId: 'rv1', tool: 'metaboard_revise', status: 'done', subject: 'topic:x',
+      contentKind: 'revise', derivedFrom: ['rc1'], payload: {}, referenceOnly: false,
+    },
+  }
+  const snapshot = builder.replace({ nodes: [reviewCallNode, reviseNode], timeline: TIMELINE })
+  assert.equal(snapshot.rows.length, 2)
+  const reviewRow = snapshot.rows.find((/** @type {any} */ r) => r.id === 'rc1')
+  assert.equal(reviewRow.data.referenceOnly, true)
+  const reviseRow = snapshot.rows.find((/** @type {any} */ r) => r.id === 'rv1')
+  assert.deepEqual(reviseRow.refs, [{ id: 'rc1', resolved: true, kind: 'review', tool: 'metaboard_review' }])
+})
+
+test('buildSnapshot: 真正不在节点集里的引用仍然是 unresolved —— 这次修复没有让一切都变成 resolved', () => {
+  const { view } = loadDefinitions()
+  const builder = view.create()
+  const reviseNode = {
+    key: 'k-revise', kind: 'metaboard-call', id: 'rv1', target: 'metaboard',
+    data: {
+      callId: 'rv1', tool: 'metaboard_revise', status: 'done', subject: 'topic:x',
+      contentKind: 'revise', derivedFrom: ['nonexistent'], payload: {}, referenceOnly: false,
+    },
+  }
+  const snapshot = builder.replace({ nodes: [reviseNode], timeline: TIMELINE })
+  assert.deepEqual(snapshot.rows[0].refs, [{ id: 'nonexistent', resolved: false }])
+})
+
 // ───────────────── 真装配器:两个 Definition 装得起来吗 ─────────────────
 
 function loadAssembler() {
@@ -394,6 +439,7 @@ test('装配器接受两个 Definition:一次带信封的调用装出一行', ()
     kind: 'metaboard-call', callId: 'd1', tool: 'metaboard_draft', turn: 1, step: 1,
     startedAt: h.data()[0].startedAt, status: 'done', endedAt: h.data()[0].endedAt,
     subject: 'topic:x', contentKind: 'draft', derivedFrom: ['c1'], payload: { title: '标题' },
+    referenceOnly: false,
   }])
 })
 
@@ -417,7 +463,7 @@ test('别的工具的 tool/result 被认领但不产出任何节点', () => {
   assert.deepEqual(h.data(), [])
 })
 
-test('一次人工评审只出一行,来自 user/message 而不是工具调用', () => {
+test('人工评审的可见行来自 user/message;工具调用行照常产出,但标记 referenceOnly(R18)', () => {
   const h = harness()
   h.asm.append(toolCall('metaboard_review', 'r1'))
   h.asm.flush()
@@ -426,10 +472,14 @@ test('一次人工评审只出一行,来自 user/message 而不是工具调用',
   h.asm.append(reviewMessage())
   h.asm.flush()
   const rows = h.data()
-  assert.equal(rows.length, 1)
-  assert.equal(rows[0].kind, 'metaboard-review')
-  assert.equal(rows[0].summary, '人工评审 · 打回')
-  assert.equal(rows[0].text, '[人工评审 · reject] 开头太平')
+  assert.equal(rows.length, 2)
+  const call = rows.find((r) => r.kind === 'metaboard-call')
+  const review = rows.find((r) => r.kind === 'metaboard-review')
+  assert.equal(call.callId, 'r1')
+  assert.equal(call.contentKind, 'review')
+  assert.equal(call.referenceOnly, true)
+  assert.equal(review.summary, '人工评审 · 打回')
+  assert.equal(review.text, '[人工评审 · reject] 开头太平')
 })
 
 test('先只装到 tool/result,再补回更早的 tool/call,行会被重放补全', () => {
@@ -445,4 +495,62 @@ test('先只装到 tool/result,再补回更早的 tool/call,行会被重放补�
   assert.equal(row.tool, 'metaboard_draft')
   assert.equal(row.status, 'done')
   assert.equal(row.contentKind, 'draft')
+})
+
+// R18 端到端回归:真装配器 + 真正注册的 view builder(不是 harness() 那个只收集
+// 节点的桩),把 draft → review → revise 整条链跑一遍,钉住 revise 对 review 的
+// 引用现在能解析 —— 这正是原来结构性地永远解析不了的那条链。
+
+/** 把两个 Definition 接上真装配器,view 端用真正注册的 ConversationViewDefinition
+ * (而不是 harness() 里那个只收集节点的桩),这样 buildSnapshot 真的跑起来。 */
+function harnessWithRealView() {
+  const Assembler = loadAssembler()
+  const { call, review, view } = loadDefinitions()
+  const builder = view.create()
+  let snapshot = builder.empty
+  const views = {
+    entries: () => [{
+      target: 'metaboard',
+      create: () => ({
+        empty: builder.empty,
+        replace: (/** @type {any} */ input) => { snapshot = builder.replace(input); return snapshot },
+        apply: (/** @type {any} */ input) => { snapshot = builder.apply(input); return snapshot },
+      }),
+    }],
+  }
+  const events = { entries: () => [call, review], fallbackEntry: () => undefined }
+  const asm = new Assembler(events, views)
+  asm.replaceWindow([], false)
+  asm.flush()
+  return { asm, snapshot: () => snapshot }
+}
+
+test('真装配器 + 真 view builder:revise 对 review 的引用端到端解析(R18 回归)', () => {
+  const h = harnessWithRealView()
+  h.asm.append(toolCall('metaboard_draft', 'd1'))
+  h.asm.flush()
+  h.asm.append(toolResult('d1', DRAFT_META))
+  h.asm.flush()
+  h.asm.append(toolCall('metaboard_review', 'r1'))
+  h.asm.flush()
+  h.asm.append(toolResult('r1', REVIEW_META))
+  h.asm.flush()
+  h.asm.append(reviewMessage())
+  h.asm.flush()
+  const REVISE_META = { subject: 'topic:x', kind: 'revise', derivedFrom: ['d1', 'r1'], payload: { added: 1, removed: 1 } }
+  h.asm.append(toolCall('metaboard_revise', 'v1'))
+  h.asm.flush()
+  h.asm.append(toolResult('v1', REVISE_META))
+  h.asm.flush()
+
+  const snapshot = h.snapshot()
+  const reviseRow = snapshot.rows.find((/** @type {any} */ r) => r.id === 'v1')
+  assert.deepEqual(reviseRow.refs, [
+    { id: 'd1', resolved: true, kind: 'draft', tool: 'metaboard_draft' },
+    { id: 'r1', resolved: true, kind: 'review', tool: 'metaboard_review' },
+  ])
+  const reviewCallRow = snapshot.rows.find((/** @type {any} */ r) => r.id === 'r1' && r.kind === 'metaboard-call')
+  assert.equal(reviewCallRow.data.referenceOnly, true)
+  const reviewMessageRow = snapshot.rows.find((/** @type {any} */ r) => r.kind === 'metaboard-review')
+  assert.equal(reviewMessageRow.data.summary, '人工评审 · 打回')
 })
