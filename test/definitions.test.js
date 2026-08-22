@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import * as cordis from '@deepseek-ai/cordis'
-import { isMetaBoardMeta, matchMetaBoardEvent } from '../lib/envelope.js'
+import { KINDS, isMetaBoardMeta, matchMetaBoardEvent } from '../lib/envelope.js'
 
 // ─────────────────────────── matchMetaBoardEvent ───────────────────────────
 
@@ -156,13 +156,15 @@ test('client 半内联的 match 与 envelope.js 在整张行为表上一致', ()
   }
 })
 
-test('client 半内联的信封判据与 envelope.js 一致', () => {
+test('client 半内联的信封判据与 envelope.js 一致,逐个 kind 比对', () => {
   const { call } = loadDefinitions()
+  // 表从 KINDS 生成,不写死:envelope.js 加了 kind 而 client.js 漏了同步,
+  // 这里立刻红。写死字面量的版本会一起漏,那正是最可能发生的一次编辑。
   const metas = [
-    { subject: 's', kind: 'draft', payload: {} },
-    { subject: 's', kind: 'review', payload: null },
-    { subject: 's', kind: 'publish', payload: 0 },
-    { subject: 's', kind: 'unknown', payload: {} },
+    ...KINDS.map((kind) => ({ subject: 's', kind, payload: {} })),
+    { subject: 's', kind: 'nonesuch', payload: {} },
+    { subject: 's', kind: 'draft', payload: null },
+    { subject: 's', kind: 'draft', payload: 0 },
     { subject: 42, kind: 'draft', payload: {} },
     { subject: 's', kind: 'draft' },
     { kind: 'draft', payload: {} },
@@ -176,6 +178,27 @@ test('client 半内联的信封判据与 envelope.js 一致', () => {
       `信封判据分歧: ${JSON.stringify(meta)}`,
     )
   }
+})
+
+test('业务失败没有传输错误,status 仍然是 failed', () => {
+  const { call } = loadDefinitions()
+  const meta = { subject: 's', kind: 'revise', payload: { added: 0, removed: 0, error: 'boom' } }
+  const next = call.update(
+    { state: { status: 'running' } },
+    { event: { time: 1, data: { meta, error: undefined } } },
+  )
+  assert.equal(next.status, 'failed')
+  assert.equal(next.payload.error, 'boom')
+})
+
+test('业务成功且没有传输错误,status 是 done', () => {
+  const { call } = loadDefinitions()
+  const meta = { subject: 's', kind: 'revise', payload: { added: 3, removed: 1 } }
+  const next = call.update(
+    { state: { status: 'running' } },
+    { event: { time: 1, data: { meta, error: undefined } } },
+  )
+  assert.equal(next.status, 'done')
 })
 
 // ───────────────── 真装配器:两个 Definition 装得起来吗 ─────────────────
