@@ -152,8 +152,8 @@ def title_block(c, title, sub):
 L, R, H = 76, 730, 54
 CARD_Y = [118, 188, 258, 360, 462, 532]
 ROLES = ["human", "tool", "tool", "human", "tool", "tool"]
-MONO_NAMES = [None, "metaboard.research", "metaboard.draft", None,
-              "metaboard.revise", "metaboard.publish"]
+MONO_NAMES = [None, "metaboard_research", "metaboard_draft", None,
+              "metaboard_revise", "metaboard_publish"]
 BAND_Y = [(104, "12:04:11 · 4m12s"), (346, "12:19:38"), (448, "12:21:02 · 1m50s")]
 EDGES = [
     ("M 730,226 H 756 V 272 H 734", "blue", 0, (768, 253)),
