@@ -554,3 +554,211 @@ test('真装配器 + 真 view builder:revise 对 review 的引用端到端解析
   const reviewMessageRow = snapshot.rows.find((/** @type {any} */ r) => r.kind === 'metaboard-review')
   assert.equal(reviewMessageRow.data.summary, '人工评审 · 打回')
 })
+
+// ─────────────────────────── 行表渲染 ───────────────────────────
+// 行表逻辑不对外导出(工厂形态没有构建步骤),这里通过 ctx.slots.register 捕获
+// 真正注册进 conversation.view 的那个组件,用一份把 createElement 记下来的
+// react 桩渲染它 —— 断言跑的是生产路径,不是我复述的一份形状。
+
+/** 捕获注册进 conversation.view 的组件,react.createElement 记成朴素对象。 */
+function loadLedgerView() {
+  const half = loadFactoryBundle(new URL('../lib/client.js', import.meta.url).pathname, {
+    react: {
+      createElement: (/** @type {any} */ type, /** @type {any} */ props, /** @type {any[]} */ ...children) =>
+        ({ type, props, children }),
+    },
+  })
+  /** @type {any} */
+  let component
+  /** @type {any} */
+  const ctx = {
+    conversationEvents: { register: () => () => {} },
+    conversationViews: { register: () => () => {} },
+    slots: {
+      inject: (/** @type {string} */ _name, /** @type {() => void} */ fn) => { fn() },
+      register: (/** @type {any} */ _spec, /** @type {any} */ comp) => { component = comp; return () => {} },
+    },
+  }
+  half.apply(ctx)
+  assert.ok(component !== undefined, 'conversation.view 没有注册组件')
+  return component
+}
+
+/** 用一份快照渲染行表,返回渲染树。 */
+function render(/** @type {any} */ snapshot) {
+  const View = loadLedgerView()
+  return View({
+    useSession: (/** @type {(s: any) => any} */ select) =>
+      select({ views: new Map([['metaboard', snapshot]]) }),
+  })
+}
+
+/** 渲染树里的全部文本,按出现顺序。 */
+function textOf(/** @type {any} */ node) {
+  if (node === null || node === undefined || node === false) return []
+  if (Array.isArray(node)) return node.flatMap(textOf)
+  if (typeof node === 'string') return [node]
+  if (typeof node === 'object' && 'children' in node) return textOf(node.children)
+  return [String(node)]
+}
+
+/** 行表里的每一行,渲染成一段文本。 */
+function renderedRows(/** @type {any} */ snapshot) {
+  /** @type {any[]} */
+  const rows = []
+  const walk = (/** @type {any} */ n) => {
+    if (Array.isArray(n)) return n.forEach(walk)
+    if (n === null || typeof n !== 'object' || !('children' in n)) return
+    if (n.props && n.props.key !== undefined) rows.push(textOf(n).join('\n'))
+    else walk(n.children)
+  }
+  walk(render(snapshot))
+  return rows
+}
+
+/** @param {any} data @param {any[]} [refs] */
+const callRow = (data, refs = []) => ({
+  key: 'metaboard-call:' + data.callId, kind: 'metaboard-call', id: data.callId,
+  target: 'metaboard', refs, data,
+})
+
+const DONE_DRAFT = callRow({
+  callId: 'd1', tool: 'metaboard_draft', turn: 2, step: 5, startedAt: 1, endedAt: 2,
+  status: 'done', subject: 'topic:x', contentKind: 'draft', derivedFrom: [],
+  payload: { wordCount: 12 }, referenceOnly: false,
+})
+
+test('行表:空快照渲染成空态而不是崩溃', () => {
+  assert.deepEqual(renderedRows({ rows: [], bySubject: {} }), [])
+  assert.deepEqual(textOf(render({ rows: [], bySubject: {} })), ['本会话还没有 MetaBoard 记录'])
+  // 视图还没建起来时 views.get 返回 undefined,同样不能崩。
+  assert.deepEqual(textOf(render(undefined)), ['本会话还没有 MetaBoard 记录'])
+})
+
+test('行表:调用行显示工具名、status、turn 与 step(判据 3 的三层)', () => {
+  const [row] = renderedRows({ rows: [DONE_DRAFT], bySubject: {} })
+  assert.match(row, /metaboard_draft/)
+  assert.match(row, /done/)
+  assert.match(row, /turn 2 \/ step 5/)
+  assert.match(row, /"wordCount": 12/)
+})
+
+test('行表:status 直接显示,不从 payload.error 重新推导', () => {
+  const failed = callRow({
+    callId: 'v1', tool: 'metaboard_revise', turn: 1, step: 1, startedAt: 1, endedAt: 2,
+    status: 'failed', subject: 'topic:x', contentKind: 'revise', derivedFrom: [],
+    payload: { added: 0, removed: 0, error: 'boom' }, referenceOnly: false,
+  })
+  const [row] = renderedRows({ rows: [failed], bySubject: {} })
+  assert.match(row, /metaboard_revise\s+·\s+failed/)
+  assert.match(row, /"error": "boom"/)
+})
+
+test('行表:referenceOnly 的行不显示 —— 一次评审只出一行', () => {
+  const reviewCall = callRow({
+    callId: 'r1', tool: 'metaboard_review', turn: 1, step: 1, startedAt: 1, endedAt: 2,
+    status: 'done', subject: 'topic:x', contentKind: 'review', derivedFrom: [],
+    payload: { decision: 'reject' }, referenceOnly: true,
+  })
+  const reviewMsg = {
+    key: 'metaboard-review:340', kind: 'metaboard-review', id: '340', target: 'metaboard',
+    data: { seq: 340, at: 3, summary: '人工评审 · 打回', text: '[人工评审 · reject] 开头太平' },
+  }
+  const rows = renderedRows({ rows: [reviewCall, reviewMsg], bySubject: {} })
+  assert.equal(rows.length, 1)
+  assert.match(rows[0], /人工评审 · 打回/)
+})
+
+test('行表:评审行取 text,不去读它根本没有的 payload', () => {
+  const reviewMsg = {
+    key: 'metaboard-review:340', kind: 'metaboard-review', id: '340', target: 'metaboard',
+    data: { seq: 340, at: 3, summary: '人工评审 · 打回', text: '[人工评审 · reject] 开头太平' },
+  }
+  const [row] = renderedRows({ rows: [reviewMsg], bySubject: {} })
+  assert.match(row, /开头太平/)
+  assert.doesNotMatch(row, /没有信封/)
+})
+
+test('行表:没有信封的调用行照常出现,不崩溃、不留 running', () => {
+  const noEnvelope = callRow({
+    callId: 'x1', tool: 'metaboard_draft', turn: 1, step: 3, startedAt: 1, endedAt: 2,
+    status: 'failed', referenceOnly: false,
+  })
+  const [row] = renderedRows({ rows: [noEnvelope], bySubject: {} })
+  assert.match(row, /metaboard_draft\s+·\s+failed/)
+  assert.match(row, /turn 1 \/ step 3/)
+  assert.match(row, /\(此次调用没有信封\)/)
+})
+
+test('行表:已解析的引用显示 kind,未解析的显示 id 与未解析标记', () => {
+  const revise = callRow({
+    callId: 'v1', tool: 'metaboard_revise', turn: 1, step: 1, startedAt: 1, endedAt: 2,
+    status: 'done', subject: 'topic:x', contentKind: 'revise', derivedFrom: ['d1', 'zz'],
+    payload: {}, referenceOnly: false,
+  }, [
+    { id: 'd1', resolved: true, kind: 'draft', tool: 'metaboard_draft' },
+    { id: 'zz', resolved: false },
+  ])
+  const [row] = renderedRows({ rows: [revise], bySubject: {} })
+  assert.match(row, /derivedFrom: draft\(d1\), zz\(未解析\)/)
+})
+
+test('行表:引用为空时不渲染 derivedFrom 那一行', () => {
+  const [row] = renderedRows({ rows: [DONE_DRAFT], bySubject: {} })
+  assert.doesNotMatch(row, /derivedFrom/)
+})
+
+test('行表:大载荷完整到达渲染层,不被截断', () => {
+  const big = 'x'.repeat(90 * 1024)
+  const draft = callRow({
+    callId: 'b1', tool: 'metaboard_draft', turn: 1, step: 1, startedAt: 1, endedAt: 2,
+    status: 'done', subject: 'topic:x', contentKind: 'draft', derivedFrom: [],
+    payload: { draft: big }, referenceOnly: false,
+  })
+  const [row] = renderedRows({ rows: [draft], bySubject: {} })
+  assert.ok(row.length > 90 * 1024, `渲染出的行只有 ${row.length} 字节`)
+})
+
+test('行表:快照从 useSession 的会话快照里按 views.get("metaboard") 取', () => {
+  const View = loadLedgerView()
+  /** @type {any[]} */
+  const seen = []
+  View({
+    useSession: (/** @type {(s: any) => any} */ select) => {
+      const snapshot = { views: new Map([['metaboard', { rows: [DONE_DRAFT], bySubject: {} }]]) }
+      const picked = select(snapshot)
+      seen.push(picked)
+      return picked
+    },
+  })
+  assert.equal(seen.length, 1)
+  assert.deepEqual(seen[0].rows, [DONE_DRAFT])
+})
+
+test('真装配器 → 真 view builder → 真行表:整条链渲染成账本', () => {
+  const h = harnessWithRealView()
+  h.asm.append(toolCall('metaboard_draft', 'd1'))
+  h.asm.flush()
+  h.asm.append(toolResult('d1', DRAFT_META))
+  h.asm.flush()
+  h.asm.append(toolCall('metaboard_review', 'r1'))
+  h.asm.flush()
+  h.asm.append(toolResult('r1', REVIEW_META))
+  h.asm.flush()
+  h.asm.append(reviewMessage())
+  h.asm.flush()
+  h.asm.append(toolCall('metaboard_revise', 'v1'))
+  h.asm.flush()
+  h.asm.append(toolResult('v1', {
+    subject: 'topic:x', kind: 'revise', derivedFrom: ['d1', 'r1'], payload: { added: 1, removed: 1 },
+  }))
+  h.asm.flush()
+
+  const rows = renderedRows(h.snapshot())
+  // draft、评审消息、revise 三行;review 的工具调用行被 referenceOnly 挡住。
+  assert.equal(rows.length, 3)
+  assert.match(rows[0], /metaboard_draft\s+·\s+done\s+·\s+turn 1 \/ step 1/)
+  assert.match(rows[1], /人工评审 · 打回/)
+  assert.match(rows[2], /metaboard_revise/)
+  assert.match(rows[2], /derivedFrom: draft\(d1\), review\(r1\)/)
+})
