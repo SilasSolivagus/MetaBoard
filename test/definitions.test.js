@@ -103,9 +103,12 @@ function loadDefinitions() {
   })
   /** @type {any[]} */
   const registered = []
+  /** @type {any[]} */
+  const views = []
   /** @type {any} */
   const ctx = {
     conversationEvents: { register: (/** @type {any} */ d) => { registered.push(d); return () => {} } },
+    conversationViews: { register: (/** @type {any} */ d) => { views.push(d); return () => {} } },
     slots: { inject: () => {}, register: () => () => {} },
   }
   half.apply(ctx)
@@ -114,6 +117,7 @@ function loadDefinitions() {
     inject: half.inject,
     call: byKind.get('metaboard-call'),
     review: byKind.get('metaboard-review'),
+    view: views[0],
   }
 }
 
@@ -199,6 +203,120 @@ test('业务成功且没有传输错误,status 是 done', () => {
     { event: { time: 1, data: { meta, error: undefined } } },
   )
   assert.equal(next.status, 'done')
+})
+
+// ────────────────────── view builder:buildSnapshot ──────────────────────
+// buildSnapshot 不对外导出(工厂形态没有构建步骤),这里通过
+// ctx.conversationViews.register 捕获真正注册的 ConversationViewDefinition,
+// 经它 create() 出的 builder 的 replace/apply 验证行为——接口与
+// packages/client/runtime 的 ConversationViewBuilder 一致。
+
+const TIMELINE = { turnOrder: [], turns: new Map() }
+
+test('view builder 注册在 target metaboard 上', () => {
+  const { view } = loadDefinitions()
+  assert.equal(view.target, 'metaboard')
+})
+
+test('buildSnapshot: 已加载的引用解析为 resolved,带目标的 kind 与 tool', () => {
+  const { view } = loadDefinitions()
+  const builder = view.create()
+  const researchNode = {
+    key: 'metaboard-call:c1', kind: 'metaboard-call', id: 'c1', target: 'metaboard',
+    data: {
+      callId: 'c1', tool: 'metaboard_research', turn: 1, step: 1, startedAt: 1, endedAt: 2,
+      status: 'done', subject: 'topic:x', contentKind: 'research', derivedFrom: [], payload: {},
+    },
+  }
+  const draftNode = {
+    key: 'metaboard-call:c2', kind: 'metaboard-call', id: 'c2', target: 'metaboard',
+    data: {
+      callId: 'c2', tool: 'metaboard_draft', turn: 1, step: 2, startedAt: 3, endedAt: 4,
+      status: 'done', subject: 'topic:x', contentKind: 'draft', derivedFrom: ['c1'], payload: {},
+    },
+  }
+  const snapshot = builder.replace({ nodes: [researchNode, draftNode], timeline: TIMELINE })
+  const draftRow = snapshot.rows.find((/** @type {any} */ r) => r.id === 'c2')
+  assert.deepEqual(draftRow.refs, [{ id: 'c1', resolved: true, kind: 'research', tool: 'metaboard_research' }])
+})
+
+test('buildSnapshot: 目标不在当前节点集里的引用降级为 unresolved,不抛错、不丢行', () => {
+  const { view } = loadDefinitions()
+  const builder = view.create()
+  const draftNode = {
+    key: 'metaboard-call:c2', kind: 'metaboard-call', id: 'c2', target: 'metaboard',
+    data: {
+      callId: 'c2', tool: 'metaboard_draft', turn: 1, step: 2, startedAt: 3, endedAt: 4,
+      status: 'done', subject: 'topic:x', contentKind: 'draft', derivedFrom: ['c1'], payload: {},
+    },
+  }
+  const snapshot = builder.replace({ nodes: [draftNode], timeline: TIMELINE })
+  assert.equal(snapshot.rows.length, 1)
+  assert.deepEqual(snapshot.rows[0].refs, [{ id: 'c1', resolved: false }])
+})
+
+test('buildSnapshot: 没有信封的行(contentKind undefined)不崩溃、不丢行,refs 为空数组', () => {
+  const { view } = loadDefinitions()
+  const builder = view.create()
+  const bareNode = {
+    key: 'metaboard-call:c3', kind: 'metaboard-call', id: 'c3', target: 'metaboard',
+    // 参数校验失败 / 子派发 / 崩溃补齐三条路径产出的行:只有 callId/tool/turn/step/
+    // startedAt/status/endedAt,没有 subject/contentKind/derivedFrom/payload。
+    data: { callId: 'c3', tool: 'metaboard_draft', turn: 1, step: 1, startedAt: 1, endedAt: 2, status: 'failed' },
+  }
+  const snapshot = builder.replace({ nodes: [bareNode], timeline: TIMELINE })
+  assert.equal(snapshot.rows.length, 1)
+  assert.deepEqual(snapshot.rows[0].refs, [])
+  assert.equal('contentKind' in snapshot.rows[0].data, false)
+})
+
+test('buildSnapshot: bySubject 按 subject 分组,没有 subject 的行(缺信封 / 评审)被跳过', () => {
+  const { view } = loadDefinitions()
+  const builder = view.create()
+  const researchNode = {
+    key: 'k1', kind: 'metaboard-call', id: 'c1', target: 'metaboard',
+    data: { callId: 'c1', tool: 'metaboard_research', status: 'done', subject: 'topic:x', contentKind: 'research', derivedFrom: [], payload: {} },
+  }
+  const draftNode = {
+    key: 'k2', kind: 'metaboard-call', id: 'c2', target: 'metaboard',
+    data: { callId: 'c2', tool: 'metaboard_draft', status: 'done', subject: 'topic:x', contentKind: 'draft', derivedFrom: ['c1'], payload: {} },
+  }
+  const otherSubjectNode = {
+    key: 'k3', kind: 'metaboard-call', id: 'c4', target: 'metaboard',
+    data: { callId: 'c4', tool: 'metaboard_research', status: 'done', subject: 'topic:y', contentKind: 'research', derivedFrom: [], payload: {} },
+  }
+  const bareNode = {
+    key: 'k4', kind: 'metaboard-call', id: 'c3', target: 'metaboard',
+    data: { callId: 'c3', tool: 'metaboard_draft', status: 'failed' },
+  }
+  const reviewNode = {
+    key: 'k5', kind: 'metaboard-review', id: '9', target: 'metaboard',
+    data: { seq: 9, at: 1, summary: 's', text: 't' },
+  }
+  const snapshot = builder.replace({
+    nodes: [researchNode, draftNode, otherSubjectNode, bareNode, reviewNode],
+    timeline: TIMELINE,
+  })
+  assert.deepEqual(snapshot.bySubject, { 'topic:x': ['c1', 'c2'], 'topic:y': ['c4'] })
+})
+
+test('buildSnapshot: apply 增量追加后,之前 unresolved 的引用重新解析', () => {
+  const { view } = loadDefinitions()
+  const builder = view.create()
+  const draftNode = {
+    key: 'k2', kind: 'metaboard-call', id: 'c2', target: 'metaboard',
+    data: { callId: 'c2', tool: 'metaboard_draft', status: 'done', subject: 'topic:x', contentKind: 'draft', derivedFrom: ['c1'], payload: {} },
+  }
+  const first = builder.replace({ nodes: [draftNode], timeline: TIMELINE })
+  assert.deepEqual(first.rows[0].refs, [{ id: 'c1', resolved: false }])
+
+  const researchNode = {
+    key: 'k1', kind: 'metaboard-call', id: 'c1', target: 'metaboard',
+    data: { callId: 'c1', tool: 'metaboard_research', status: 'done', subject: 'topic:x', contentKind: 'research', derivedFrom: [], payload: {} },
+  }
+  const second = builder.apply({ upserts: [researchNode], timeline: TIMELINE })
+  const row = second.rows.find((/** @type {any} */ r) => r.id === 'c2')
+  assert.deepEqual(row.refs, [{ id: 'c1', resolved: true, kind: 'research', tool: 'metaboard_research' }])
 })
 
 // ───────────────── 真装配器:两个 Definition 装得起来吗 ─────────────────
