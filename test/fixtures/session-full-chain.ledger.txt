@@ -1,0 +1,62 @@
+14:metaboard-callcall_00_s3LHgg68Rd0HiBHmR7HO1913
+metaboard_research  ·  done  ·  turn 1 / step 1
+{
+  "count": 3,
+  "sources": [
+    {
+      "title": "凌晨四点的城市属于谁",
+      "structure": [
+        "钩子",
+        "冲突",
+        "反转"
+      ]
+    },
+    {
+      "title": "我用夜跑治好了失眠",
+      "structure": [
+        "数据开场",
+        "案例",
+        "呼吁"
+      ]
+    },
+    {
+      "title": "夜跑装备到底要花多少钱",
+      "structure": [
+        "清单",
+        "价格锚点"
+      ]
+  
+…[截断]
+
+════
+
+14:metaboard-callcall_00_QaVkTF5qnuCFOnnKSHDl2248
+metaboard_draft  ·  done  ·  turn 1 / step 2
+derivedFrom: research(call_00_s3LHgg68Rd0HiBHmR7HO1913)
+{
+  "charCount": 800,
+  "draft": "夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜
+…[截断]
+
+════
+
+16:metaboard-review2115
+人工评审 · 打回
+[人工评审 · reject] 提纲太单薄，需要补充细节。
+
+════
+
+14:metaboard-callcall_00_BtZlsDt1AJqWnmqtsRJT5013
+metaboard_revise  ·  done  ·  turn 1 / step 4
+derivedFrom: draft(call_00_QaVkTF5qnuCFOnnKSHDl2248), review(call_00_WCZ1tz2GsnHL24mALzz90764)
+{
+  "added": 180,
+  "removed": 95,
+  "callId": "call_00_BtZlsDt1AJqWnmqtsRJT5013"
+}
+
+════
+
+14:metaboard-callcall_00_Ih7HvnpDSw0D3ct1cssV4485
+metaboard_review  ·  failed  ·  turn 2 / step 1
+(此次调用没有信封)

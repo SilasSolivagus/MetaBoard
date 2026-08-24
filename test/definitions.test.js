@@ -1,12 +1,11 @@
 // @ts-check
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-// fileURLToPath 而非 new URL(...).pathname:后者不做百分号解码,检出路径里只要有
-// 空格或非 ASCII(例如放在 ~/Library/Application Support/ 下),readFileSync 就会失败。
-import { fileURLToPath } from 'node:url'
-import * as cordis from '@deepseek-ai/cordis'
 import { KINDS, isMetaBoardMeta, matchMetaBoardEvent } from '../lib/envelope.js'
+import {
+  TIMELINE, loadDefinitions, loadAssembler, harnessWithRealView, loadLedgerView,
+  render, textOf, renderedRows,
+} from './harness.mjs'
 
 // ─────────────────────────── matchMetaBoardEvent ───────────────────────────
 
@@ -85,44 +84,7 @@ test('别的插件写的 user/message 不被认领', () => {
 // client.js 是浏览器工厂,没有构建步骤,node 里不能直接 import。这里补上它
 // 期待的 window.__ModuleLoader__ 契约,拿到工厂真正注册的两个 Definition。
 
-/** @param {string} path @param {Record<string, unknown>} modules */
-function loadFactoryBundle(path, modules) {
-  /** @type {any} */
-  let captured
-  // 在本 realm 里求值,不用 vm:跨 realm 的对象原型不同,assert.deepEqual 会
-  // 把结构相同的结果判成不相等。
-  const load = new Function('window', readFileSync(path, 'utf8') + `\n//# sourceURL=${path}`)
-  load({ __ModuleLoader__: { load: (/** @type {any} */ m) => { captured = m } } })
-  assert.ok(captured !== undefined, `${path} 没有调用 window.__ModuleLoader__.load`)
-  return captured.factory((/** @type {string} */ id) => {
-    if (!(id in modules)) throw new Error(`未打桩的 require: ${id}`)
-    return modules[id]
-  })
-}
 
-function loadDefinitions() {
-  const half = loadFactoryBundle(fileURLToPath(new URL('../lib/client.js', import.meta.url)), {
-    react: { createElement: () => null },
-  })
-  /** @type {any[]} */
-  const registered = []
-  /** @type {any[]} */
-  const views = []
-  /** @type {any} */
-  const ctx = {
-    conversationEvents: { register: (/** @type {any} */ d) => { registered.push(d); return () => {} } },
-    conversationViews: { register: (/** @type {any} */ d) => { views.push(d); return () => {} } },
-    slots: { inject: () => {}, register: () => () => {} },
-  }
-  half.apply(ctx)
-  const byKind = new Map(registered.map((d) => [d.kind, d]))
-  return {
-    inject: half.inject,
-    call: byKind.get('metaboard-call'),
-    review: byKind.get('metaboard-review'),
-    view: views[0],
-  }
-}
 
 test('client 半注册 metaboard-call 与 metaboard-review,并声明所需服务', () => {
   const { inject, call, review } = loadDefinitions()
@@ -221,7 +183,6 @@ test('业务成功且没有传输错误,status 是 done', () => {
 // 经它 create() 出的 builder 的 replace/apply 验证行为——接口与
 // packages/client/runtime 的 ConversationViewBuilder 一致。
 
-const TIMELINE = { turnOrder: [], turns: new Map() }
 
 test('view builder 注册在 target metaboard 上', () => {
   const { view } = loadDefinitions()
@@ -376,17 +337,6 @@ test('buildSnapshot: 真正不在节点集里的引用仍然是 unresolved —�
 
 // ───────────────── 真装配器:两个 Definition 装得起来吗 ─────────────────
 
-function loadAssembler() {
-  const runtime = loadFactoryBundle(
-    fileURLToPath(new URL('../node_modules/@deepseek-ai/dsh-client-runtime/lib/client.js', import.meta.url)),
-    {
-      '@deepseek-ai/cordis': cordis,
-      // 装配器不碰它,给个不会在求值期抛的桩就够了
-      '@deepseek-ai/dsh-client-ui-slots': new Proxy({}, { get: () => class {} }),
-    },
-  )
-  return runtime.ConversationNodeAssembler
-}
 
 /** 把两个 Definition 接上真装配器,外加一个只收集节点的 view builder。 */
 function harness() {
@@ -566,29 +516,6 @@ test('先只装到 tool/result,再补回更早的 tool/call,行会被重放补�
 // 节点的桩),把 draft → review → revise 整条链跑一遍,钉住 revise 对 review 的
 // 引用现在能解析 —— 这正是原来结构性地永远解析不了的那条链。
 
-/** 把两个 Definition 接上真装配器,view 端用真正注册的 ConversationViewDefinition
- * (而不是 harness() 里那个只收集节点的桩),这样 buildSnapshot 真的跑起来。 */
-function harnessWithRealView() {
-  const Assembler = loadAssembler()
-  const { call, review, view } = loadDefinitions()
-  const builder = view.create()
-  let snapshot = builder.empty
-  const views = {
-    entries: () => [{
-      target: 'metaboard',
-      create: () => ({
-        empty: builder.empty,
-        replace: (/** @type {any} */ input) => { snapshot = builder.replace(input); return snapshot },
-        apply: (/** @type {any} */ input) => { snapshot = builder.apply(input); return snapshot },
-      }),
-    }],
-  }
-  const events = { entries: () => [call, review], fallbackEntry: () => undefined }
-  const asm = new Assembler(events, views)
-  asm.replaceWindow([], false)
-  asm.flush()
-  return { asm, snapshot: () => snapshot }
-}
 
 test('真装配器 + 真 view builder:revise 对 review 的引用端到端解析(R18 回归)', () => {
   const h = harnessWithRealView()
@@ -625,61 +552,9 @@ test('真装配器 + 真 view builder:revise 对 review 的引用端到端解析
 // 真正注册进 conversation.view 的那个组件,用一份把 createElement 记下来的
 // react 桩渲染它 —— 断言跑的是生产路径,不是我复述的一份形状。
 
-/** 捕获注册进 conversation.view 的组件,react.createElement 记成朴素对象。 */
-function loadLedgerView() {
-  const half = loadFactoryBundle(fileURLToPath(new URL('../lib/client.js', import.meta.url)), {
-    react: {
-      createElement: (/** @type {any} */ type, /** @type {any} */ props, /** @type {any[]} */ ...children) =>
-        ({ type, props, children }),
-    },
-  })
-  /** @type {any} */
-  let component
-  /** @type {any} */
-  const ctx = {
-    conversationEvents: { register: () => () => {} },
-    conversationViews: { register: () => () => {} },
-    slots: {
-      inject: (/** @type {string} */ _name, /** @type {() => void} */ fn) => { fn() },
-      register: (/** @type {any} */ _spec, /** @type {any} */ comp) => { component = comp; return () => {} },
-    },
-  }
-  half.apply(ctx)
-  assert.ok(component !== undefined, 'conversation.view 没有注册组件')
-  return component
-}
 
-/** 用一份快照渲染行表,返回渲染树。 */
-function render(/** @type {any} */ snapshot) {
-  const View = loadLedgerView()
-  return View({
-    useSession: (/** @type {(s: any) => any} */ select) =>
-      select({ views: new Map([['metaboard', snapshot]]) }),
-  })
-}
 
-/** 渲染树里的全部文本,按出现顺序。 */
-function textOf(/** @type {any} */ node) {
-  if (node === null || node === undefined || node === false) return []
-  if (Array.isArray(node)) return node.flatMap(textOf)
-  if (typeof node === 'string') return [node]
-  if (typeof node === 'object' && 'children' in node) return textOf(node.children)
-  return [String(node)]
-}
 
-/** 行表里的每一行,渲染成一段文本。 */
-function renderedRows(/** @type {any} */ snapshot) {
-  /** @type {any[]} */
-  const rows = []
-  const walk = (/** @type {any} */ n) => {
-    if (Array.isArray(n)) return n.forEach(walk)
-    if (n === null || typeof n !== 'object' || !('children' in n)) return
-    if (n.props && n.props.key !== undefined) rows.push(textOf(n).join('\n'))
-    else walk(n.children)
-  }
-  walk(render(snapshot))
-  return rows
-}
 
 /** @param {any} data @param {any[]} [refs] */
 const callRow = (data, refs = []) => ({

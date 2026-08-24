@@ -1,0 +1,628 @@
+{
+  "_meta": {
+    "note": "完整链路 research→draft→review(成功)→revise,外加一次参数校验失败的 review。采自真实会话,未经手工编辑。",
+    "harvestedFrom": "/Users/silas/.dsh/sessions/--Users-silas-Deepdeep--/session-a27b43c2-08f3-493b-82c1-cecae78581f3/session.jsonl.zstd",
+    "totalKept": 15,
+    "metaboardCalls": 5,
+    "foreignCalls": 0,
+    "droppedEventTypes": {
+      "session": 1,
+      "permission/preset": 1,
+      "sandbox/mode": 1,
+      "approval/policy": 1,
+      "agent/inbox/spliced": 6,
+      "turn/start": 2,
+      "step/start": 7,
+      "session/title": 2,
+      "request/header": 1,
+      "request/context": 1,
+      "session/title-llm-request": 1,
+      "assistant/chunk": 55,
+      "reasoning-chunks": 122,
+      "tool-call-chunks": 16,
+      "assistant/message": 7,
+      "step/end": 7,
+      "text-chunks": 3,
+      "turn/end": 2
+    },
+    "userMessagesStrippedOfBody": 4,
+    "warning": "非 metaboard 的 user/message 只留了 source,正文已丢弃。其余事件逐字保留。"
+  },
+  "events": [
+    {
+      "seq": 7,
+      "type": "user/message",
+      "time": 1787538633206,
+      "data": {
+        "source": {
+          "kind": "user",
+          "rpcId": "9710c9d0-d652-42cb-bbc3-afb7b5c9ab3d",
+          "clientTimeZone": "Asia/Shanghai"
+        }
+      }
+    },
+    {
+      "seq": 8,
+      "type": "user/message",
+      "time": 1787538633209,
+      "data": {
+        "source": {
+          "kind": "plugin",
+          "plugin": "@deepseek-ai/dsh-system-prompt",
+          "form": "snapshot",
+          "sections": [
+            {
+              "name": "sandbox:policy",
+              "text": "Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"/Users/silas/Deepdeep\". Some platform temporary areas may also be writable."
+            },
+            {
+              "name": "approval:policy",
+              "text": "Approval policy: ask. Operations that require approval may ask through the configured answerers; without an available answerer, the request fails closed."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "seq": 9,
+      "type": "user/message",
+      "time": 1787538633210,
+      "data": {
+        "source": {
+          "kind": "skill-catalog",
+          "form": "catalog",
+          "entries": [
+            {
+              "name": "ai-torch-proposal",
+              "description": "将AI实验过程报告（docx/pdf/html）自动整合成 AI Torch 第二轮提案申报表。当用户提到\"AI Torch提案\"、\"申报表\"、\"填提案\"、\"生成提案\"、\"提案模版\"、\"把报告整理成提案\"，或者提供了实验报告并想提交评审时，立即使用此技能。即使用户只是说\"帮我整理成提案\"，也应该触发这个技能。"
+            },
+            {
+              "name": "animation-vocabulary",
+              "description": "Reverse-lookup glossary that turns a vague description of a web animation or motion effect into its exact term (\"the bouncy thing when a popover opens\" → Pop in; \"the iOS rubber-band scroll\" → Rubber-banding). Use when the user asks \"what's it called when…\", or describes a motion effect without knowing its name and wants the right word to prompt an AI or designer with. For naming an effect, not designing or building one."
+            },
+            {
+              "name": "apple-design",
+              "description": "Apple's approach to interface design and fluid, physical motion, translated for the web. Use when building or reviewing gesture-driven UI, spring animations, drag/swipe/sheet interactions, momentum and interruptible transitions, translucent materials and depth, typography (optical sizing, tracking, leading), reduced-motion, or the design foundations (feedback, spatial consistency, restraint) behind Apple-style interfaces."
+            },
+            {
+              "name": "autoplan",
+              "description": "Auto-review pipeline — reads the full CEO, design, eng, and DX review skills from disk and runs them sequentially with auto-decisions using 6 decision principles. Surfaces taste decisions (close approaches, borderline scope, codex disagreements) at a final approval gate. One command, fully reviewed plan out. Use when asked to \"auto review\", \"autoplan\", \"run all reviews\", \"review this plan automatically\", or \"make the decisions for me\". Proactively suggest when the user has a plan file and wan..."
+            },
+            {
+              "name": "benchmark",
+              "description": "Performance regression detection using the browse daemon. Establishes baselines for page load times, Core Web Vitals, and resource sizes. Compares before/after on every PR. Tracks performance trends over time. Use when: \"performance\", \"benchmark\", \"page speed\", \"lighthouse\", \"web vitals\", \"bundle size\", \"load time\". (gstack) Voice triggers (speech-to-text aliases): \"speed test\", \"check performance\"."
+            },
+            {
+              "name": "benchmark-models",
+              "description": "Cross-model benchmark for gstack skills. Runs the same prompt through Claude, GPT (via Codex CLI), and Gemini side-by-side — compares latency, tokens, cost, and optionally quality via LLM judge. Answers \"which model is actually best for this skill?\" with data instead of vibes. Separate from /benchmark, which measures web page performance. Use when: \"benchmark models\", \"compare models\", \"which model is best for X\", \"cross-model comparison\", \"model shootout\". (gstack) Voice triggers (speech-to-..."
+            },
+            {
+              "name": "browse",
+              "description": "Fast headless browser for QA testing and site dogfooding. Navigate any URL, interact with elements, verify page state, diff before/after actions, take annotated screenshots, check responsive layouts, test forms and uploads, handle dialogs, and assert element states. ~100ms per command. Use when you need to test a feature, verify a deployment, dogfood a user flow, or file a bug with evidence. Use when asked to \"open in browser\", \"test the site\", \"take a screenshot\", or \"dogfood this\". (gstack)"
+            },
+            {
+              "name": "canary",
+              "description": "Post-deploy canary monitoring. Watches the live app for console errors, performance regressions, and page failures using the browse daemon. Takes periodic screenshots, compares against pre-deploy baselines, and alerts on anomalies. Use when: \"monitor deploy\", \"canary\", \"post-deploy check\", \"watch production\", \"verify deploy\". (gstack)"
+            },
+            {
+              "name": "careful",
+              "description": "Safety guardrails for destructive commands. Warns before rm -rf, DROP TABLE, force-push, git reset --hard, kubectl delete, and similar destructive operations. User can override each warning. Use when touching prod, debugging live systems, or working in a shared environment. Use when asked to \"be careful\", \"safety mode\", \"prod mode\", or \"careful mode\". (gstack)"
+            },
+            {
+              "name": "codex",
+              "description": "OpenAI Codex CLI wrapper — three modes. Code review: independent diff review via codex review with pass/fail gate. Challenge: adversarial mode that tries to break your code. Consult: ask codex anything with session continuity for follow-ups. The \"200 IQ autistic developer\" second opinion. Use when asked to \"codex review\", \"codex challenge\", \"ask codex\", \"second opinion\", or \"consult codex\". (gstack) Voice triggers (speech-to-text aliases): \"code x\", \"code ex\", \"get another opinion\"."
+            },
+            {
+              "name": "context-restore",
+              "description": "Restore working context saved earlier by /context-save. Loads the most recent saved state (across all branches by default) so you can pick up where you left off — even across Conductor workspace handoffs. Use when asked to \"resume\", \"restore context\", \"where was I\", or \"pick up where I left off\". Pair with /context-save. Formerly /checkpoint resume — renamed because Claude Code treats /checkpoint as a native rewind alias in current environments. (gstack)"
+            },
+            {
+              "name": "context-save",
+              "description": "Save working context. Captures git state, decisions made, and remaining work so any future session can pick up without losing a beat. Use when asked to \"save progress\", \"save state\", \"context save\", or \"save my work\". Pair with /context-restore to resume later. Formerly /checkpoint — renamed because Claude Code treats /checkpoint as a native rewind alias in current environments, which was shadowing this skill. (gstack)"
+            },
+            {
+              "name": "control-tower-analyst",
+              "description": "企业运营控制塔分析师技能。当用户提供OKR表、项目进度表、会议纪要、周报等多源数据，需要生成进展驱动的控制塔简报时，必须使用此技能。触发场景包括：OKR进展分析、项目里程碑追踪、执行偏差根因分析、高管简报撰写、预警清单生成、资源健康度扫描、P0/P1项目状态评估。只要用户提到\"控制塔\"、\"进度简报\"、\"OKR进展\"、\"预警分析\"、\"根因拆解\"、\"高管简报\"等关键词，或提供多份运营数据要求综合分析，立即调用此技能。"
+            },
+            {
+              "name": "cso",
+              "description": "Chief Security Officer mode. Infrastructure-first security audit: secrets archaeology, dependency supply chain, CI/CD pipeline security, LLM/AI security, skill supply chain scanning, plus OWASP Top 10, STRIDE threat modeling, and active verification. Two modes: daily (zero-noise, 8/10 confidence gate) and comprehensive (monthly deep scan, 2/10 bar). Trend tracking across audit runs. Use when: \"security audit\", \"threat model\", \"pentest review\", \"OWASP\", \"CSO review\". (gstack) Voice triggers (s..."
+            },
+            {
+              "name": "design-consultation",
+              "description": "Design consultation: understands your product, researches the landscape, proposes a complete design system (aesthetic, typography, color, layout, spacing, motion), and generates font+color preview pages. Creates DESIGN.md as your project's design source of truth. For existing sites, use /plan-design-review to infer the system instead. Use when asked to \"design system\", \"brand guidelines\", or \"create DESIGN.md\". Proactively suggest when starting a new project's UI with no existing design syste..."
+            },
+            {
+              "name": "design-html",
+              "description": "Design finalization: generates production-quality Pretext-native HTML/CSS. Works with approved mockups from /design-shotgun, CEO plans from /plan-ceo-review, design review context from /plan-design-review, or from scratch with a user description. Text actually reflows, heights are computed, layouts are dynamic. 30KB overhead, zero deps. Smart API routing: picks the right Pretext patterns for each design type. Use when: \"finalize this design\", \"turn this into HTML\", \"build me a page\", \"impleme..."
+            },
+            {
+              "name": "design-review",
+              "description": "Designer's eye QA: finds visual inconsistency, spacing issues, hierarchy problems, AI slop patterns, and slow interactions — then fixes them. Iteratively fixes issues in source code, committing each fix atomically and re-verifying with before/after screenshots. For plan-mode design review (before implementation), use /plan-design-review. Use when asked to \"audit the design\", \"visual QA\", \"check if it looks good\", or \"design polish\". Proactively suggest when the user mentions visual inconsiste..."
+            },
+            {
+              "name": "design-shotgun",
+              "description": "Design shotgun: generate multiple AI design variants, open a comparison board, collect structured feedback, and iterate. Standalone design exploration you can run anytime. Use when: \"explore designs\", \"show me options\", \"design variants\", \"visual brainstorm\", or \"I don't like how this looks\". Proactively suggest when the user describes a UI feature but hasn't seen what it could look like. (gstack)"
+            },
+            {
+              "name": "devex-review",
+              "description": "Live developer experience audit. Uses the browse tool to actually TEST the developer experience: navigates docs, tries the getting started flow, times TTHW, screenshots error messages, evaluates CLI help text. Produces a DX scorecard with evidence. Compares against /plan-devex-review scores if they exist (the boomerang: plan said 3 minutes, reality says 8). Use when asked to \"test the DX\", \"DX audit\", \"developer experience test\", or \"try the onboarding\". Proactively suggest after shipping a d..."
+            },
+            {
+              "name": "document-release",
+              "description": "Post-ship documentation update. Reads all project docs, cross-references the diff, updates README/ARCHITECTURE/CONTRIBUTING/CLAUDE.md to match what shipped, polishes CHANGELOG voice, cleans up TODOS, and optionally bumps VERSION. Use when asked to \"update the docs\", \"sync documentation\", or \"post-ship docs\". Proactively suggest after a PR is merged or code is shipped. (gstack)"
+            },
+            {
+              "name": "emil-design-eng",
+              "description": "This skill encodes Emil Kowalski's philosophy on UI polish, component design, animation decisions, and the invisible details that make software feel great."
+            },
+            {
+              "name": "fanxie-audit",
+              "description": "给「扒代码仓库 → 反写 PRD」的成果做验收，判它到底遗没遗、漏没漏。 触发：\"验收一下 / 帮我卡一下 / 这份扒全了吗 / 还有没有漏 / 不遗不漏吗 / 全景清单验收 / 金样张验收 / 反写做完了 / 这一坨可以收口了吗\"。 内核：验收 = 自己重做一遍发现过程再对账，不是通读成果打分。 必须先盲扫（不给成果）后对账，最后用「漏检率 / 分支覆盖 / 错误率」三个数下硬判定： 通过 or 回炉，没有\"大致齐了\"。 写反写成果本身不走本技能；评审别人的 PRD 走 prd-review，自检自己写的 PRD 走 prd-selfcheck。"
+            },
+            {
+              "name": "fireworks-tech-graph",
+              "description": "Create technical diagrams such as software architecture, data flow, flowcharts, sequence diagrams, C4 reviews, cloud deployments, event streams, observability investigations, agent/memory systems, UML, ER, network topology, timelines, and technical concept maps, then export SVG, PNG, focused semantic SVG-to-GIF motion, or offline interactive HTML. Treat direct requests such as \"Generate a GIF\", \"生成 GIF\", or \"制作 GIF\" as motion requests, and use this skill when the user asks to visualize a syst..."
+            },
+            {
+              "name": "freeze",
+              "description": "Restrict file edits to a specific directory for the session. Blocks Edit and Write outside the allowed path. Use when debugging to prevent accidentally \"fixing\" unrelated code, or when you want to scope changes to one module. Use when asked to \"freeze\", \"restrict edits\", \"only edit this folder\", or \"lock down edits\". (gstack)"
+            },
+            {
+              "name": "graphic-thinking",
+              "description": "Turn any messy idea, text, decision, or business situation into ONE clear diagram using the \"seven diagrams\" method from Jun Sakurada's 图形思考 (Graphic Thinking). Use whenever the user wants to visualize thinking, map a relationship or business model, structure/categorize scattered information, root-cause a problem (\"why is X happening\"), compare options, lay out a process or steps, show what makes a product/service distinctive, or map hierarchy/direction — even if they just paste text and say ..."
+            },
+            {
+              "name": "gstack",
+              "description": "Fast headless browser for QA testing and site dogfooding. Navigate pages, interact with elements, verify state, diff before/after, take annotated screenshots, test responsive layouts, forms, uploads, dialogs, and capture bug evidence. Use when asked to open or test a site, verify a deployment, dogfood a user flow, or file a bug with screenshots. (gstack)"
+            },
+            {
+              "name": "gstack-upgrade",
+              "description": "Upgrade gstack to the latest version. Detects global vs vendored install, runs the upgrade, and shows what's new. Use when asked to \"upgrade gstack\", \"update gstack\", or \"get latest version\". Voice triggers (speech-to-text aliases): \"upgrade the tools\", \"update the tools\", \"gee stack upgrade\", \"g stack upgrade\"."
+            },
+            {
+              "name": "guard",
+              "description": "Full safety mode: destructive command warnings + directory-scoped edits. Combines /careful (warns before rm -rf, DROP TABLE, force-push, etc.) with /freeze (blocks edits outside a specified directory). Use for maximum safety when touching prod or debugging live systems. Use when asked to \"guard mode\", \"full safety\", \"lock it down\", or \"maximum safety\". (gstack)"
+            },
+            {
+              "name": "health",
+              "description": "Code quality dashboard. Wraps existing project tools (type checker, linter, test runner, dead code detector, shell linter), computes a weighted composite 0-10 score, and tracks trends over time. Use when: \"health check\", \"code quality\", \"how healthy is the codebase\", \"run all checks\", \"quality score\". (gstack)"
+            },
+            {
+              "name": "huashu-design",
+              "description": "花叔Design（Huashu-Design）——用HTML做高保真原型、交互Demo、幻灯片、动画、设计变体探索+设计方向顾问+专家评审的一体化设计能力。HTML是工具不是媒介，根据任务embody不同专家（UX设计师/动画师/幻灯片设计师/原型师），避免web design tropes。触发词：做原型、设计Demo、交互原型、HTML演示、动画Demo、设计变体、hi-fi设计、UI mockup、prototype、设计探索、做个HTML页面、做个可视化、app原型、iOS原型、移动应用mockup、导出MP4、导出GIF、60fps视频、设计风格、设计方向、设计哲学、配色方案、视觉风格、推荐风格、选个风格、做个好看的、评审、好不好看、review this design。**主干能力**：Junior Designer工作流（先给假设+reasoning+placeholder再迭代）、反AI slop清单、React+Babel最佳实践、Tweaks变体切换、Speaker Notes演示、Starter Components（幻灯片外壳/变体画布/动画引擎/设备边框..."
+            },
+            {
+              "name": "humanizer",
+              "description": "Remove signs of AI-generated writing from text. Use when editing or reviewing text to make it sound more natural and human-written. Based on Wikipedia's comprehensive \"Signs of AI writing\" guide. Detects and fixes patterns including: inflated symbolism, promotional language, superficial -ing analyses, vague attributions, em dash overuse, rule of three, AI vocabulary words, passive voice, negative parallelisms, and filler phrases."
+            },
+            {
+              "name": "investigate",
+              "description": "Systematic debugging with root cause investigation. Four phases: investigate, analyze, hypothesize, implement. Iron Law: no fixes without root cause. Use when asked to \"debug this\", \"fix this bug\", \"why is this broken\", \"investigate this error\", or \"root cause analysis\". Proactively invoke this skill (do NOT debug directly) when the user reports errors, 500 errors, stack traces, unexpected behavior, \"it was working yesterday\", or is troubleshooting why something stopped working. (gstack)"
+            },
+            {
+              "name": "land-and-deploy",
+              "description": "Land and deploy workflow. Merges the PR, waits for CI and deploy, verifies production health via canary checks. Takes over after /ship creates the PR. Use when: \"merge\", \"land\", \"deploy\", \"merge and verify\", \"land it\", \"ship it to production\". (gstack)"
+            },
+            {
+              "name": "landing-report",
+              "description": "Read-only queue dashboard for workspace-aware ship. Shows which VERSION slots are currently claimed by open PRs, which sibling Conductor workspaces have WIP work likely to ship soon, and what slot /ship would pick next. No mutations — just a snapshot. Use when asked to \"landing report\", \"what's in the queue\", \"show me open PRs\", or \"which version do I claim next\". (gstack)"
+            },
+            {
+              "name": "learn",
+              "description": "Manage project learnings. Review, search, prune, and export what gstack has learned across sessions. Use when asked to \"what have we learned\", \"show learnings\", \"prune stale learnings\", or \"export learnings\". Proactively suggest when the user asks about past patterns or wonders \"didn't we fix this before?\""
+            },
+            {
+              "name": "make-pdf",
+              "description": "Turn any markdown file into a publication-quality PDF. Proper 1in margins, intelligent page breaks, page numbers, cover pages, running headers, curly quotes and em dashes, clickable TOC, diagonal DRAFT watermark. Not a draft artifact — a finished artifact. Use when asked to \"make a PDF\", \"export to PDF\", \"turn this markdown into a PDF\", or \"generate a document\". (gstack) Voice triggers (speech-to-text aliases): \"make this a pdf\", \"make it a pdf\", \"export to pdf\", \"turn this into a pdf\", \"turn..."
+            },
+            {
+              "name": "office-hours",
+              "description": "YC Office Hours — two modes. Startup mode: six forcing questions that expose demand reality, status quo, desperate specificity, narrowest wedge, observation, and future-fit. Builder mode: design thinking brainstorming for side projects, hackathons, learning, and open source. Saves a design doc. Use when asked to \"brainstorm this\", \"I have an idea\", \"help me think through this\", \"office hours\", or \"is this worth building\". Proactively invoke this skill (do NOT answer directly) when the user de..."
+            },
+            {
+              "name": "open-gstack-browser",
+              "description": "Launch GStack Browser — AI-controlled Chromium with the sidebar extension baked in. Opens a visible browser window where you can watch every action in real time. The sidebar shows a live activity feed and chat. Anti-bot stealth built in. Use when asked to \"open gstack browser\", \"launch browser\", \"connect chrome\", \"open chrome\", \"real browser\", \"launch chrome\", \"side panel\", or \"control my browser\". Voice triggers (speech-to-text aliases): \"show me the browser\"."
+            },
+            {
+              "name": "pair-agent",
+              "description": "Pair a remote AI agent with your browser. One command generates a setup key and prints instructions the other agent can follow to connect. Works with OpenClaw, Hermes, Codex, Cursor, or any agent that can make HTTP requests. The remote agent gets its own tab with scoped access (read+write by default, admin on request). Use when asked to \"pair agent\", \"connect agent\", \"share browser\", \"remote browser\", \"let another agent use my browser\", or \"give browser access\". (gstack) Voice triggers (speec..."
+            },
+            {
+              "name": "plan-ceo-review",
+              "description": "CEO/founder-mode plan review. Rethink the problem, find the 10-star product, challenge premises, expand scope when it creates a better product. Four modes: SCOPE EXPANSION (dream big), SELECTIVE EXPANSION (hold scope + cherry-pick expansions), HOLD SCOPE (maximum rigor), SCOPE REDUCTION (strip to essentials). Use when asked to \"think bigger\", \"expand scope\", \"strategy review\", \"rethink this\", or \"is this ambitious enough\". Proactively suggest when the user is questioning scope or ambition of ..."
+            },
+            {
+              "name": "plan-design-review",
+              "description": "Designer's eye plan review — interactive, like CEO and Eng review. Rates each design dimension 0-10, explains what would make it a 10, then fixes the plan to get there. Works in plan mode. For live site visual audits, use /design-review. Use when asked to \"review the design plan\" or \"design critique\". Proactively suggest when the user has a plan with UI/UX components that should be reviewed before implementation. (gstack)"
+            },
+            {
+              "name": "plan-devex-review",
+              "description": "Interactive developer experience plan review. Explores developer personas, benchmarks against competitors, designs magical moments, and traces friction points before scoring. Three modes: DX EXPANSION (competitive advantage), DX POLISH (bulletproof every touchpoint), DX TRIAGE (critical gaps only). Use when asked to \"DX review\", \"developer experience audit\", \"devex review\", or \"API design review\". Proactively suggest when the user has a plan for developer-facing products (APIs, CLIs, SDKs, li..."
+            },
+            {
+              "name": "plan-eng-review",
+              "description": "Eng manager-mode plan review. Lock in the execution plan — architecture, data flow, diagrams, edge cases, test coverage, performance. Walks through issues interactively with opinionated recommendations. Use when asked to \"review the architecture\", \"engineering review\", or \"lock in the plan\". Proactively suggest when the user has a plan or design doc and is about to start coding — to catch architecture issues before implementation. (gstack) Voice triggers (speech-to-text aliases): \"tech review..."
+            },
+            {
+              "name": "plan-tune",
+              "description": "Self-tuning question sensitivity + developer psychographic for gstack (v1: observational). Review which AskUserQuestion prompts fire across gstack skills, set per-question preferences (never-ask / always-ask / ask-only-for-one-way), inspect the dual-track profile (what you declared vs what your behavior suggests), and enable/disable question tuning. Conversational interface — no CLI syntax required. Use when asked to \"tune questions\", \"stop asking me that\", \"too many questions\", \"show my prof..."
+            },
+            {
+              "name": "prd-review",
+              "description": "评审 / 反写别人的 123云盘 PRD、脑图、原型——丢 .docx / 原型图 说\"评审 / 审一下 / 给批注 / 查差异 / 反写 / 这个需求你会怎么1 2 3回复\"就走本技能（三问 + 逐条批注，必实读代码）。 内核：始终用读者的脑子读、穷尽 + 可读、必实读 /Users/silas/code/123pan 再下结论、 说人话给不写代码的产品经理看。仅适用于 PRD 评审/反写；普通开发任务不受本技能\"实读代码\"铁律约束。 自检自己写的 PRD（\"帮我自检 / 这份 PRD 行不行 / 别人会不会来问\"）用 prd-selfcheck，不走本技能。"
+            },
+            {
+              "name": "prd-selfcheck",
+              "description": "自检自己写的 123云盘 PRD，让它达到「只用看，不用问」——别人拿到读完就能照着做，不用回来找你确认。 用户说\"帮我自检 / 对照自检清单 / 这份 PRD 行不行 / 别人会不会来问 / 达到只用看不用问 / 查查我这版 PRD 有没有漏 / 写完了帮我过一遍 / 上会前审审自己写的需求\"，或丢来一份自己刚写的 PRD（.docx / md / 原型）说\"看看还缺啥\"，就用本技能。 评审/反写别人的 PRD 用 prd-review（用法A），本技能只管自检自己写的。 内核：始终用读者的脑子读、穷尽 + 可读、必实读 /Users/silas/code/123pan 核你写的实数与假设、 说人话给不写代码的产品经理看。仅适用于 PRD 自检；普通开发任务不受本技能\"实读代码\"铁律约束。"
+            },
+            {
+              "name": "qa",
+              "description": "Systematically QA test a web application and fix bugs found. Runs QA testing, then iteratively fixes bugs in source code, committing each fix atomically and re-verifying. Use when asked to \"qa\", \"QA\", \"test this site\", \"find bugs\", \"test and fix\", or \"fix what's broken\". Proactively suggest when the user says a feature is ready for testing or asks \"does this work?\". Three tiers: Quick (critical/high only), Standard (+ medium), Exhaustive (+ cosmetic). Produces before/after health scores, fix ..."
+            },
+            {
+              "name": "qa-only",
+              "description": "Report-only QA testing. Systematically tests a web application and produces a structured report with health score, screenshots, and repro steps — but never fixes anything. Use when asked to \"just report bugs\", \"qa report only\", or \"test but don't fix\". For the full test-fix-verify loop, use /qa instead. Proactively suggest when the user wants a bug report without any code changes. (gstack) Voice triggers (speech-to-text aliases): \"bug report\", \"just check for bugs\"."
+            },
+            {
+              "name": "retro",
+              "description": "Weekly engineering retrospective. Analyzes commit history, work patterns, and code quality metrics with persistent history and trend tracking. Team-aware: breaks down per-person contributions with praise and growth areas. Use when asked to \"weekly retro\", \"what did we ship\", or \"engineering retrospective\". Proactively suggest at the end of a work week or sprint. (gstack)"
+            },
+            {
+              "name": "review",
+              "description": "Pre-landing PR review. Analyzes diff against the base branch for SQL safety, LLM trust boundary violations, conditional side effects, and other structural issues. Use when asked to \"review this PR\", \"code review\", \"pre-landing review\", or \"check my diff\". Proactively suggest when the user is about to merge or land code changes. (gstack)"
+            },
+            {
+              "name": "s2h",
+              "description": "Skill-to-HTML: Decompose any Claude Code skill into an interactive HTML page for human understanding. Reads a SKILL.md (local path, GitHub URL, or skills.sh), runs deterministic structural parsing, semantic analysis, and security scanning, then generates a self-contained interactive HTML explainer. Use when: \"explain this skill\", \"what does /X do\", \"decompose this skill\", \"s2h\", or when a user wants to understand an unfamiliar skill before installing."
+            },
+            {
+              "name": "scenario-mindmap",
+              "description": "把一个需求/已上线功能画成「按场景拆」的 xmind 脑图——写需求的第一步范式。 触发词：画脑图、需求脑图、反写PRD脑图、按场景拆、把这个需求画个脑图、 重新做个脑图、生成 xmind、给XX功能画脑图。适用于 123云盘 等产品的 正向需求脑图与反写PRD脑图。产出=可直接打开的 .xmind 文件。"
+            },
+            {
+              "name": "setup-browser-cookies",
+              "description": "Import cookies from your real Chromium browser into the headless browse session. Opens an interactive picker UI where you select which cookie domains to import. Use before QA testing authenticated pages. Use when asked to \"import cookies\", \"login to the site\", or \"authenticate the browser\". (gstack)"
+            },
+            {
+              "name": "setup-deploy",
+              "description": "Configure deployment settings for /land-and-deploy. Detects your deploy platform (Fly.io, Render, Vercel, Netlify, Heroku, GitHub Actions, custom), production URL, health check endpoints, and deploy status commands. Writes the configuration to CLAUDE.md so all future deploys are automatic. Use when: \"setup deploy\", \"configure deployment\", \"set up land-and-deploy\", \"how do I deploy with gstack\", \"add deploy config\"."
+            },
+            {
+              "name": "setup-gbrain",
+              "description": "Set up gbrain for this coding agent: install the CLI, initialize a local PGLite or Supabase brain, register MCP, capture per-remote trust policy. One command from zero to \"gbrain is running, and this agent can call it.\" Use when: \"setup gbrain\", \"connect gbrain\", \"start gbrain\", \"install gbrain\", \"configure gbrain for this machine\". (gstack)"
+            },
+            {
+              "name": "ship",
+              "description": "Ship workflow: detect + merge base branch, run tests, review diff, bump VERSION, update CHANGELOG, commit, push, create PR. Use when asked to \"ship\", \"deploy\", \"push to main\", \"create a PR\", \"merge and push\", or \"get it deployed\". Proactively invoke this skill (do NOT push/PR directly) when the user says code is ready, asks about deploying, wants to push code up, or asks to create a PR. (gstack)"
+            },
+            {
+              "name": "unfreeze",
+              "description": "Clear the freeze boundary set by /freeze, allowing edits to all directories again. Use when you want to widen edit scope without ending the session. Use when asked to \"unfreeze\", \"unlock edits\", \"remove freeze\", or \"allow all edits\". (gstack)"
+            },
+            {
+              "name": "using-superpowers",
+              "description": "Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions"
+            },
+            {
+              "name": "writing-style",
+              "description": "统一所有面向他人的书面输出的语言风格。撰写、修改、审核任何对外文字——报告、分析、文档、方案、公告、总结、说明性正文，以及 PRD/需求说明——时使用：把冗长、口语化、带情绪吐槽的原文，改写成简洁、客观、稳重的商务书面语（去 AI 腔、去街面口语），只保留事实与结论，数字保持精确、可追溯。写完自查也用。不要在没有文本的情况下触发。"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "seq": 1802,
+      "type": "tool/call",
+      "time": 1787538658314,
+      "data": {
+        "turn": 1,
+        "step": 1,
+        "callId": "call_00_s3LHgg68Rd0HiBHmR7HO1913",
+        "name": "metaboard_research",
+        "arguments": "{\"subject\": \"topic:fixture\", \"query\": \"night run\"}"
+      }
+    },
+    {
+      "seq": 1803,
+      "type": "tool/result",
+      "time": 1787538658328,
+      "data": {
+        "turn": 1,
+        "step": 1,
+        "message": {
+          "source": {
+            "kind": "tool",
+            "callId": "call_00_s3LHgg68Rd0HiBHmR7HO1913"
+          },
+          "content": [
+            {
+              "type": "tool-result",
+              "toolCallId": "call_00_s3LHgg68Rd0HiBHmR7HO1913",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Found 3 pieces on the same topic. (call id: call_00_s3LHgg68Rd0HiBHmR7HO1913 — pass this in a later draft's derivedFrom)"
+                }
+              ],
+              "isError": false
+            }
+          ],
+          "role": "user",
+          "id": "c363115f-7c2a-4f99-ae70-dd7641bb0fc7"
+        },
+        "meta": {
+          "subject": "topic:fixture",
+          "kind": "research",
+          "payload": {
+            "count": 3,
+            "sources": [
+              {
+                "title": "凌晨四点的城市属于谁",
+                "structure": [
+                  "钩子",
+                  "冲突",
+                  "反转"
+                ]
+              },
+              {
+                "title": "我用夜跑治好了失眠",
+                "structure": [
+                  "数据开场",
+                  "案例",
+                  "呼吁"
+                ]
+              },
+              {
+                "title": "夜跑装备到底要花多少钱",
+                "structure": [
+                  "清单",
+                  "价格锚点"
+                ]
+              }
+            ],
+            "callId": "call_00_s3LHgg68Rd0HiBHmR7HO1913"
+          }
+        }
+      }
+    },
+    {
+      "seq": 1981,
+      "type": "tool/call",
+      "time": 1787538662110,
+      "data": {
+        "turn": 1,
+        "step": 2,
+        "callId": "call_00_QaVkTF5qnuCFOnnKSHDl2248",
+        "name": "metaboard_draft",
+        "arguments": "{\"subject\": \"topic:fixture\", \"outline\": \"夜跑计划\", \"derivedFrom\": [\"call_00_s3LHgg68Rd0HiBHmR7HO1913\"]}"
+      }
+    },
+    {
+      "seq": 1982,
+      "type": "tool/result",
+      "time": 1787538662120,
+      "data": {
+        "turn": 1,
+        "step": 2,
+        "message": {
+          "source": {
+            "kind": "tool",
+            "callId": "call_00_QaVkTF5qnuCFOnnKSHDl2248"
+          },
+          "content": [
+            {
+              "type": "tool-result",
+              "toolCallId": "call_00_QaVkTF5qnuCFOnnKSHDl2248",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Draft written: 800 characters. (call id: call_00_QaVkTF5qnuCFOnnKSHDl2248 — pass this in a later revise's derivedFrom)"
+                }
+              ],
+              "isError": false
+            }
+          ],
+          "role": "user",
+          "id": "3285d75e-849e-41e1-b6d6-ec2f0b908132"
+        },
+        "meta": {
+          "subject": "topic:fixture",
+          "kind": "draft",
+          "derivedFrom": [
+            "call_00_s3LHgg68Rd0HiBHmR7HO1913"
+          ],
+          "payload": {
+            "charCount": 800,
+            "draft": "夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划夜跑计划",
+            "callId": "call_00_QaVkTF5qnuCFOnnKSHDl2248"
+          }
+        }
+      }
+    },
+    {
+      "seq": 2109,
+      "type": "tool/call",
+      "time": 1787538664752,
+      "data": {
+        "turn": 1,
+        "step": 3,
+        "callId": "call_00_WCZ1tz2GsnHL24mALzz90764",
+        "name": "metaboard_review",
+        "arguments": "{\"subject\": \"topic:fixture\", \"decision\": \"reject\", \"note\": \"提纲太单薄，需要补充细节。\"}"
+      }
+    },
+    {
+      "seq": 2110,
+      "type": "tool/result",
+      "time": 1787538664761,
+      "data": {
+        "turn": 1,
+        "step": 3,
+        "message": {
+          "source": {
+            "kind": "tool",
+            "callId": "call_00_WCZ1tz2GsnHL24mALzz90764"
+          },
+          "content": [
+            {
+              "type": "tool-result",
+              "toolCallId": "call_00_WCZ1tz2GsnHL24mALzz90764",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Review recorded. (call id: call_00_WCZ1tz2GsnHL24mALzz90764 — pass this in a later revise's derivedFrom)"
+                }
+              ],
+              "isError": false
+            }
+          ],
+          "role": "user",
+          "id": "0823a730-6ef9-48bf-95a2-a5ca65a571cd"
+        },
+        "meta": {
+          "subject": "topic:fixture",
+          "kind": "review",
+          "payload": {
+            "decision": "reject",
+            "note": "提纲太单薄，需要补充细节。",
+            "recorded": true,
+            "callId": "call_00_WCZ1tz2GsnHL24mALzz90764"
+          }
+        }
+      }
+    },
+    {
+      "seq": 2115,
+      "type": "user/message",
+      "time": 1787538664776,
+      "data": {
+        "content": [
+          {
+            "type": "text",
+            "text": "[人工评审 · reject] 提纲太单薄，需要补充细节。"
+          }
+        ],
+        "source": {
+          "kind": "plugin",
+          "plugin": "metaboard",
+          "form": "notice",
+          "summary": "人工评审 · 打回",
+          "callId": "call_00_WCZ1tz2GsnHL24mALzz90764"
+        },
+        "role": "user",
+        "id": "ddf29524-fd07-4bdc-a2b6-9701f881cc86"
+      }
+    },
+    {
+      "seq": 2308,
+      "type": "tool/call",
+      "time": 1787538667608,
+      "data": {
+        "turn": 1,
+        "step": 4,
+        "callId": "call_00_BtZlsDt1AJqWnmqtsRJT5013",
+        "name": "metaboard_revise",
+        "arguments": "{\"subject\": \"topic:fixture\", \"notes\": \"补充分段和具体时间点。\", \"derivedFrom\": [\"call_00_QaVkTF5qnuCFOnnKSHDl2248\", \"call_00_WCZ1tz2GsnHL24mALzz90764\"]}"
+      }
+    },
+    {
+      "seq": 2309,
+      "type": "tool/result",
+      "time": 1787538667616,
+      "data": {
+        "turn": 1,
+        "step": 4,
+        "message": {
+          "source": {
+            "kind": "tool",
+            "callId": "call_00_BtZlsDt1AJqWnmqtsRJT5013"
+          },
+          "content": [
+            {
+              "type": "tool-result",
+              "toolCallId": "call_00_BtZlsDt1AJqWnmqtsRJT5013",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Revised: +180 / −95. (call id: call_00_BtZlsDt1AJqWnmqtsRJT5013 — pass this in a later review's derivedFrom)"
+                }
+              ],
+              "isError": false
+            }
+          ],
+          "role": "user",
+          "id": "6faf7248-9e97-4b82-b184-8ef0fedf3c59"
+        },
+        "meta": {
+          "subject": "topic:fixture",
+          "kind": "revise",
+          "derivedFrom": [
+            "call_00_QaVkTF5qnuCFOnnKSHDl2248",
+            "call_00_WCZ1tz2GsnHL24mALzz90764"
+          ],
+          "payload": {
+            "added": 180,
+            "removed": 95,
+            "callId": "call_00_BtZlsDt1AJqWnmqtsRJT5013"
+          }
+        }
+      }
+    },
+    {
+      "seq": 2329,
+      "type": "user/message",
+      "time": 1787538715746,
+      "data": {
+        "source": {
+          "kind": "user",
+          "rpcId": "3845671c-44ea-4908-88c0-219205599335",
+          "clientTimeZone": "Asia/Shanghai"
+        }
+      }
+    },
+    {
+      "seq": 2422,
+      "type": "tool/call",
+      "time": 1787538718242,
+      "data": {
+        "turn": 2,
+        "step": 1,
+        "callId": "call_00_Ih7HvnpDSw0D3ct1cssV4485",
+        "name": "metaboard_review",
+        "arguments": "{\"subject\": \"topic:fixture\", \"decision\": \"reject\"}"
+      }
+    },
+    {
+      "seq": 2423,
+      "type": "tool/result",
+      "time": 1787538718251,
+      "data": {
+        "turn": 2,
+        "step": 1,
+        "message": {
+          "source": {
+            "kind": "tool",
+            "callId": "call_00_Ih7HvnpDSw0D3ct1cssV4485"
+          },
+          "content": [
+            {
+              "type": "tool-result",
+              "toolCallId": "call_00_Ih7HvnpDSw0D3ct1cssV4485",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Error: invalid arguments: missing required property \"note\""
+                }
+              ],
+              "isError": true
+            }
+          ],
+          "role": "user",
+          "id": "14aebc90-342f-48a2-9f5f-f390fa0c3d9b"
+        }
+      }
+    }
+  ]
+}
