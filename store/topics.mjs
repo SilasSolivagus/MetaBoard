@@ -175,3 +175,15 @@ export function allocateId(topics) {
   }
   return `t${max + 1}`
 }
+
+/**
+ * 这个 topic id 存在吗。四个内容工具共用这一个判据 —— 各写一份就会漂移,
+ * 这个项目已经被「两份实现各自演化」咬过三次。
+ *
+ * 归档过的选题仍然算存在:归档是看板可见性,不是删除。已经开工的内容还要能继续记录。
+ * @param {string} id
+ * @param {string} [path]
+ */
+export function topicExists(id, path) {
+  return fold(readOps(path)).has(id)
+}
