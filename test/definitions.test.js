@@ -2,6 +2,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+// fileURLToPath 而非 new URL(...).pathname:后者不做百分号解码,检出路径里只要有
+// 空格或非 ASCII(例如放在 ~/Library/Application Support/ 下),readFileSync 就会失败。
+import { fileURLToPath } from 'node:url'
 import * as cordis from '@deepseek-ai/cordis'
 import { KINDS, isMetaBoardMeta, matchMetaBoardEvent } from '../lib/envelope.js'
 
@@ -98,7 +101,7 @@ function loadFactoryBundle(path, modules) {
 }
 
 function loadDefinitions() {
-  const half = loadFactoryBundle(new URL('../lib/client.js', import.meta.url).pathname, {
+  const half = loadFactoryBundle(fileURLToPath(new URL('../lib/client.js', import.meta.url)), {
     react: { createElement: () => null },
   })
   /** @type {any[]} */
@@ -130,6 +133,11 @@ test('client 半注册 metaboard-call 与 metaboard-review,并声明所需服务
   assert.equal(review.target, 'metaboard')
 })
 
+// 这两条等价测试挡的是「已列举形状上的行为分歧」,不是「行为等价」。
+// 边界要说清楚:下面的事件表是手写的 16 条形状,kind 表由 KINDS 派生。
+// KINDS 那一半是双向的 —— 任一半加了 kind 而另一半没跟上,立刻红。
+// 事件表这一半是单向的 —— 只往 client.js 加一个 match 分支、envelope.js 没有
+// 对应形状进表,两边跑同一张旧表照样全绿。新增 match 分支时必须手工往表里加行。
 test('client 半内联的 match 与 envelope.js 在整张行为表上一致', () => {
   const { call, review } = loadDefinitions()
   const events = [
@@ -370,7 +378,7 @@ test('buildSnapshot: 真正不在节点集里的引用仍然是 unresolved —�
 
 function loadAssembler() {
   const runtime = loadFactoryBundle(
-    new URL('../node_modules/@deepseek-ai/dsh-client-runtime/lib/client.js', import.meta.url).pathname,
+    fileURLToPath(new URL('../node_modules/@deepseek-ai/dsh-client-runtime/lib/client.js', import.meta.url)),
     {
       '@deepseek-ai/cordis': cordis,
       // 装配器不碰它,给个不会在求值期抛的桩就够了
@@ -611,7 +619,7 @@ test('真装配器 + 真 view builder:revise 对 review 的引用端到端解析
 
 /** 捕获注册进 conversation.view 的组件,react.createElement 记成朴素对象。 */
 function loadLedgerView() {
-  const half = loadFactoryBundle(new URL('../lib/client.js', import.meta.url).pathname, {
+  const half = loadFactoryBundle(fileURLToPath(new URL('../lib/client.js', import.meta.url)), {
     react: {
       createElement: (/** @type {any} */ type, /** @type {any} */ props, /** @type {any[]} */ ...children) =>
         ({ type, props, children }),
@@ -748,6 +756,26 @@ test('行表:在飞的评审调用行可见,完成后才被抑制(R20 的代价)
     payload: { decision: 'approve' }, referenceOnly: true,
   })
   assert.equal(renderedRows({ rows: [done], bySubject: {} }).length, 0)
+})
+
+test('行表:引用的目标没有信封时退到工具名,不渲染字面量 undefined(M2)', () => {
+  // 上游 research 被 run_code 子派发:调用行在,但没有信封,contentKind 是 undefined。
+  const upstream = callRow({
+    callId: 'u1', tool: 'metaboard_research', turn: 1, step: 1, startedAt: 1, endedAt: 2,
+    status: 'done',
+  })
+  const downstream = callRow(
+    {
+      callId: 'd1', tool: 'metaboard_draft', turn: 1, step: 2, startedAt: 3, endedAt: 4,
+      status: 'done', subject: 'topic:x', contentKind: 'draft', derivedFrom: ['u1'],
+      payload: {},
+    },
+    [{ id: 'u1', resolved: true, kind: undefined, tool: 'metaboard_research' }],
+  )
+  const rows = renderedRows({ rows: [upstream, downstream], bySubject: {} })
+  const drafted = rows.find((r) => /metaboard_draft/.test(r))
+  assert.match(drafted, /derivedFrom: metaboard_research\(u1\)/)
+  assert.doesNotMatch(drafted, /undefined/)
 })
 
 test('行表:评审行取 text,不去读它根本没有的 payload', () => {
