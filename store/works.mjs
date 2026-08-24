@@ -25,6 +25,7 @@
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { withLock } from './lock.mjs'
 
 /**
  * 工作项在流程里的位置。整套照搬参照项目 dashi-taskboard —— 状态集、看板/二级的
@@ -83,7 +84,7 @@ export const AGENT_FORBIDDEN = /** @type {const} */ (['done'])
 const LEGACY_STATUS = { initial: 'backlog', researching: 'in_progress', drafting: 'in_progress', revising: 'in_progress' }
 
 /** 操作词表。加新 op 必须同时加折叠分支 —— fold 见到不认识的 op 会跳过。 */
-export const OPS = /** @type {const} */ (['create', 'status', 'title', 'archive'])
+export const OPS = /** @type {const} */ (['create', 'status', 'title', 'archive', 'comment'])
 
 export const ACTORS = /** @type {const} */ (['user', 'agent'])
 
@@ -104,10 +105,23 @@ export const ACTORS = /** @type {const} */ (['user', 'agent'])
  */
 export const MAX_LINE_BYTES = 4096
 
+/**
+ * 单条 comment 正文的上限。
+ *
+ * 这不是性能考虑,是「正文进信封、不进 C 类日志」那条分工的执行点。comment 承载的是
+ * 要求、打回的理由、agent 的自述 —— 都是摘要。有人想把稿件塞进来时,这条先拦住。
+ * 3000 字节约合 1000 个汉字,留给单行上限 4096 的余量足够放下 id 与时间戳。
+ */
+export const MAX_COMMENT_BYTES = 3000
+
+/** ~/.metaboard/。projects.mjs 也要用,所以抽出来 —— 两处各写一份就会漂移。 */
+export function metaboardHome() {
+  return process.env.METABOARD_HOME ?? join(homedir(), '.metaboard')
+}
+
 /** @returns {string} 日志路径。METABOARD_HOME 覆盖默认位置(测试用)。 */
 export function storePath() {
-  const home = process.env.METABOARD_HOME ?? join(homedir(), '.metaboard')
-  return join(home, 'works.jsonl')
+  return join(metaboardHome(), 'works.jsonl')
 }
 
 /**
@@ -134,6 +148,16 @@ function validate(op) {
     if (!STATUSES.includes(op.to)) throw new Error(`unknown status: ${JSON.stringify(op.to)}`)
     if (op.from !== undefined && !STATUSES.includes(op.from)) {
       throw new Error(`unknown status: ${JSON.stringify(op.from)}`)
+    }
+  }
+  if (op.op === 'comment') {
+    if (typeof op.body !== 'string' || op.body.trim() === '') throw new Error('comment needs a non-empty body')
+    const n = Buffer.byteLength(op.body, 'utf8')
+    if (n > MAX_COMMENT_BYTES) {
+      throw new Error(
+        `comment body is ${n} bytes, over the ${MAX_COMMENT_BYTES}-byte limit. A comment carries `
+        + 'requirements, a hand-back reason, or a summary of what you did — the text itself belongs '
+        + 'in the dsh envelope.')
     }
   }
 }
@@ -216,16 +240,25 @@ export function fold(ops) {
         createdAt: op.ts,
         updatedAt: op.ts,
         archivedAt: undefined,
+        version: 1,
+        comments: /** @type {any[]} */ ([]),
+        project: undefined,
+        binding: undefined,
       })
       continue
     }
     const t = works.get(id)
     // 指向不存在工作项的操作跳过 —— 同样只可能来自外部编辑。
     if (t === undefined) continue
-    if (op.op === 'status') t.status = LEGACY_STATUS[op.to] ?? op.to
-    else if (op.op === 'title') t.title = op.to
+    if (op.op === 'status') {
+      t.status = LEGACY_STATUS[op.to] ?? op.to
+      // 绑定跟着状态走:进 in_progress 记下是谁在做,离开就清掉。
+      t.binding = t.status === 'in_progress' ? op.binding : undefined
+    } else if (op.op === 'title') t.title = op.to
     else if (op.op === 'archive') t.archivedAt = op.ts
+    else if (op.op === 'comment') t.comments.push({ ts: op.ts, actor: op.actor, body: op.body, callId: op.callId })
     t.updatedAt = op.ts
+    t.version += 1
   }
   return works
 }
@@ -279,4 +312,53 @@ export function workState(id, path) {
 export function claim(id, from, path) {
   if (from !== 'todo') return
   appendOp({ ts: new Date().toISOString(), actor: 'agent', work: id, op: 'status', from, to: 'in_progress' }, path)
+}
+
+/**
+ * 写不进去的两种理由。分成 code 而不是两个类:调用方(工具)统一把它转成
+ * 结果里的 error 字符串,分类是给人读的,不是给 catch 分支用的。
+ */
+export class ConflictError extends Error {
+  /** @param {'version'|'binding'} code @param {string} message */
+  constructor(code, message) {
+    super(message)
+    this.name = 'ConflictError'
+    this.code = code
+  }
+}
+
+/**
+ * 带前置条件的追加。三步(读版本 → 比对 → 追加)在锁里跑完。
+ *
+ * 传数组时是全有或全无:先全部 validate 再一条条写。中途一条不合法,前面的也不落地。
+ * 这条对 `return`(打回 = 留言 + 改状态)和 `metaboard_report` 的交回是必需的 ——
+ * 留言写下了而状态没改,读的人会以为活儿还在 agent 手上。
+ *
+ * @param {any|any[]} ops
+ * @param {{ ifVersion?: number, binding?: { session: string, workspace: string } }} [opts]
+ * @param {string} [path]
+ * @returns {any[]} 写进去的操作
+ */
+export function appendChecked(ops, opts = {}, path = storePath()) {
+  const list = Array.isArray(ops) ? ops : [ops]
+  if (list.length === 0) return []
+  return withLock(path, () => {
+    const id = opWork(list[0])
+    const w = fold(readOps(path)).get(id)
+    if (w === undefined) throw new Error(`unknown work item: ${id}`)
+    if (opts.ifVersion !== undefined && w.version !== opts.ifVersion) {
+      throw new ConflictError('version',
+        `${id} changed while you were working (it is at version ${w.version}, you had ${opts.ifVersion}). `
+        + 'Read it again and reconcile before writing.')
+    }
+    if (w.binding !== undefined && list.some((o) => o.actor === 'agent')
+      && w.binding.session !== opts.binding?.session) {
+      // R28:人可以夺权,agent 不行。
+      throw new ConflictError('binding',
+        `${id} is claimed by another conversation (${w.binding.session}). Never take over another `
+        + "agent's claim — report it instead.")
+    }
+    for (const op of list) validate(op)
+    return list.map((op) => appendOp(op, path))
+  })
 }

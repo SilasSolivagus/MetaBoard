@@ -19,6 +19,7 @@ import { join } from 'node:path'
 import {
   STATUSES, MAIN_STATUSES, SECONDARY_STATUSES, STATUS_LABEL, AGENT_FORBIDDEN,
   MAX_LINE_BYTES, storePath, appendOp, readOps, fold, allocateId, workState,
+  appendChecked, ConflictError,
 } from '../store/works.mjs'
 
 /** 每个用例一个干净的 store 目录,不碰真实的 ~/.metaboard/。 */
@@ -244,5 +245,49 @@ test('workState:未立项与取消都拒绝,其余放行并带回当前状态', 
     assert.deepEqual(workState('b', s.path), { ok: true, status: 'todo' })
     assert.deepEqual(workState('d', s.path), { ok: true, status: 'in_review' })
     assert.equal(workState('nope', s.path).ok, false)
+  } finally { s.cleanup() }
+})
+
+test('version 从 1 起,每条作用上去的操作加 1', () => {
+  const s = tempStore()
+  try {
+    appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: '甲' }, s.path)
+    assert.equal(fold(readOps(s.path)).get('t1').version, 1)
+    appendOp({ ts: at(2), actor: 'user', work: 't1', op: 'status', from: 'backlog', to: 'todo' }, s.path)
+    appendOp({ ts: at(3), actor: 'user', work: 't1', op: 'title', to: '乙' }, s.path)
+    assert.equal(fold(readOps(s.path)).get('t1').version, 3)
+  } finally { s.cleanup() }
+})
+
+test('ifVersion 对不上就抛 ConflictError,而且什么都没写进去', () => {
+  const s = tempStore()
+  try {
+    appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: '甲' }, s.path)
+    const op = { ts: at(2), actor: 'user', work: 't1', op: 'status', from: 'backlog', to: 'todo' }
+    assert.throws(
+      () => appendChecked(op, { ifVersion: 7 }, s.path),
+      (e) => e instanceof ConflictError && e.code === 'version')
+    assert.equal(readOps(s.path).length, 1)
+  } finally { s.cleanup() }
+})
+
+test('ifVersion 对得上就写进去', () => {
+  const s = tempStore()
+  try {
+    appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: '甲' }, s.path)
+    appendChecked({ ts: at(2), actor: 'user', work: 't1', op: 'status', from: 'backlog', to: 'todo' }, { ifVersion: 1 }, s.path)
+    assert.equal(fold(readOps(s.path)).get('t1').status, 'todo')
+  } finally { s.cleanup() }
+})
+
+test('一次传多条,要么全写要么全不写', () => {
+  const s = tempStore()
+  try {
+    appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: '甲' }, s.path)
+    assert.throws(() => appendChecked([
+      { ts: at(2), actor: 'user', work: 't1', op: 'comment', body: '先记一句' },
+      { ts: at(3), actor: 'user', work: 't1', op: 'status', from: 'backlog', to: '不存在的状态' },
+    ], {}, s.path))
+    assert.equal(readOps(s.path).length, 1, '第二条不合法,第一条也不该落地')
   } finally { s.cleanup() }
 })
