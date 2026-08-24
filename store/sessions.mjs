@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * 读 dsh 的会话日志,按选题把 MetaBoard 的工作事件抽出来。
+ * 读 dsh 的会话日志,按工作项把 MetaBoard 的会话事件抽出来。
  *
  * 这是 D 方案(界面另起)的承重接口:外部进程不经过 dsh 的运行时,直接读它的持久化
  * 日志。要如实说明这条接口的性质 —— 它读的是 `~/.dsh/sessions/**​/session.jsonl.zstd`,
@@ -118,23 +118,23 @@ export async function readSessionEvents(path) {
 }
 
 /**
- * 把某个选题的工作事件从所有会话里收集出来。
+ * 把某个工作项的会话事件从所有会话里收集出来。
  *
  * 只取 `tool/result` 上的信封。评审那条 `user/message` 不单独取 —— 评审的
  * decision 与 note 本来就在 review 信封的 payload 里,取两遍会让时间线上出现两行。
  *
- * @param {string} topic 选题 id
+ * @param {string} work 工作项 id
  * @param {string} [root]
  * @returns {Promise<{ at: number, kind: string, callId: string|undefined, sessionId: string, derivedFrom: string[], payload: any }[]>}
  */
-export async function collectWork(topic, root = sessionRoot()) {
+export async function collectEvents(work, root = sessionRoot()) {
   /** @type {any[]} */
   const out = []
   for (const { sessionId, path } of listSessionLogs(root)) {
     for (const event of await readSessionEvents(path)) {
       if (event.type !== 'tool/result') continue
       const meta = event.data?.meta
-      if (!isMetaBoardMeta(meta) || meta.subject !== topic) continue
+      if (!isMetaBoardMeta(meta) || meta.subject !== work) continue
       out.push({
         at: typeof event.time === 'number' ? event.time : Date.parse(String(event.time)),
         kind: meta.kind,
@@ -150,12 +150,12 @@ export async function collectWork(topic, root = sessionRoot()) {
 }
 
 /**
- * 收集全部选题的工作事件计数,用于看板上显示「这个选题有多少活儿」。
- * 一次扫描扫出全部,比每个选题各扫一遍便宜。
+ * 收集全部工作项的会话事件计数,用于看板上显示「这个工作项有多少活儿」。
+ * 一次扫描扫出全部,比每个工作项各扫一遍便宜。
  * @param {string} [root]
  * @returns {Promise<Map<string, { count: number, lastAt: number }>>}
  */
-export async function workSummary(root = sessionRoot()) {
+export async function eventSummary(root = sessionRoot()) {
   /** @type {Map<string, { count: number, lastAt: number }>} */
   const by = new Map()
   for (const { path } of listSessionLogs(root)) {

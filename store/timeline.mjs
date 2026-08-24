@@ -6,7 +6,7 @@
  * task_activities 表存字段审计、ai_chat_events 存会话记录 —— 彼此不通,所以你永远
  * 看不到「这次改稿是在评审打回之后、状态改成 revising 之前发生的」。
  *
- * 这里能并,是因为两边都是只追加的事件:C 类日志天生是变更流(store/topics.mjs 选这个
+ * 这里能并,是因为两边都是只追加的事件:C 类日志天生是变更流(store/works.mjs 选这个
  * 形态就是为了这一刻),dsh 的会话本来就是事件流。剩下的只是按时间戳排序。
  */
 
@@ -18,7 +18,7 @@
  */
 export function describe(e) {
   if (e.source === 'board') {
-    if (e.op === 'create') return `开选题：${e.title}`
+    if (e.op === 'create') return `开工作项：${e.title}`
     if (e.op === 'status') return `状态 ${e.from ?? '?'} → ${e.to}`
     if (e.op === 'title') return `改名为：${e.to}`
     if (e.op === 'archive') return '归档'
@@ -30,7 +30,8 @@ export function describe(e) {
     return `${e.kind} 失败：${p.error}`
   }
   switch (e.kind) {
-    case 'topic': return `开选题：${p.title ?? ''}`
+    case 'work':
+    case 'topic': return `开工作项：${p.title ?? ''}`
     case 'research': {
       const n = p.count ?? (p.sources?.length ?? 0)
       const u = p.unverified
@@ -45,23 +46,23 @@ export function describe(e) {
 
 /**
  * 合并成一条时间线。
- * @param {any[]} ops 该选题的 C 类操作(已按 topic 过滤)
- * @param {any[]} work 该选题的工作事件(store/sessions.mjs 的 collectWork 结果)
+ * @param {any[]} ops 该工作项的 C 类操作(已按 id 过滤)
+ * @param {any[]} events 该工作项的会话事件(store/sessions.mjs 的 collectEvents 结果)
  * @returns {any[]} 按时间升序
  */
-export function mergeTimeline(ops, work) {
-  // 开选题这件事两边都有记录:C 类日志的 create,和 metaboard_topic_create 的信封。
+export function mergeTimeline(ops, events) {
+  // 开工作项这件事两边都有记录:C 类日志的 create,和 metaboard_work_create 的信封。
   // 两条都不是多余的 —— 信封让 dsh 的账本不出现「成功但没有信封」的行,C 类日志是
   // 看板状态的权威。但在合并视图里它们是同一件事,显示两遍是噪音。
-  // 规则:看板事实以 C 类日志为准,信封的 topic 条目让位。
-  const created = new Set(ops.filter((o) => o.op === 'create').map((o) => o.topic))
-  const work2 = created.size === 0 ? work : work.filter((w) => w.kind !== 'topic')
+  // 规则:看板事实以 C 类日志为准,信封条目让位。('topic' 是 'work' 的旧 kind 名。)
+  const created = ops.some((o) => o.op === 'create')
+  const kept = created ? events.filter((e) => e.kind !== 'work' && e.kind !== 'topic') : events
 
   const entries = [
     ...ops.map((o) => ({ at: Date.parse(o.ts), source: 'board', actor: o.actor, ...o })),
-    ...work2.map((w) => ({ ...w, source: 'work' })),
+    ...kept.map((e) => ({ ...e, source: 'session' })),
   ]
-  // 同一毫秒时让看板动作排在工作事件前面:状态先改、活儿再干,读起来更顺。
+  // 同一毫秒时让看板动作排在会话事件前面:状态先改、活儿再干,读起来更顺。
   // 这是个呈现选择,不是事实主张 —— 同毫秒本来就没有真实先后。
   entries.sort((a, b) => a.at - b.at || (a.source === 'board' ? -1 : 1))
   return entries

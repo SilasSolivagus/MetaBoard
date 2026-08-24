@@ -1,9 +1,9 @@
 // @ts-check
 /**
- * C 类存储:选题表。
+ * C 类存储:工作项表。
  *
  * spec 第 4 节把数据分成三类。A 类(素材、稿件、改稿)进 `tool/result.meta` 的信封,
- * B 类(人工评审)进 `user/message`,C 类(选题状态、排期、看板位置)进 MetaBoard 自有
+ * B 类(人工评审)进 `user/message`,C 类(工作项状态、排期、看板位置)进 MetaBoard 自有
  * 存储 —— 理由是「是可变状态不是事件,且不应进模型上下文」。这个文件就是 C 类。
  *
  * ── 为什么是只追加的日志,不是一张存当前值的表 ──
@@ -26,9 +26,26 @@ import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-/** 内容生产的状态流转。取 CHECK 式枚举的形式(照 dashi),但取值是内容生产的,不是 issue 的。 */
+/**
+ * 工作项在流程里的位置。**通用取值,不带领域行话** —— 这一条改过一次:
+ * 最初写的是 initial/researching/drafting/in_review/revising/done,那是内容生产的
+ * 行话,而且和事件的 kind(research/draft/revise)重复了。状态说的是「这活儿在你的
+ * 流程里走到哪」,kind 说的是「干了什么」,两件事。混在一起,换个领域(法务审查、
+ * 调研报告)就得改 schema,而 spec 第 1 节写的终点是通用产品。
+ *
+ * 形式照 dashi(CHECK 式固定枚举)。dashi 试过让每个项目自定义工作流,后来把整套
+ * 删掉了(0009_remove_workflow_schema.sql:DROP TABLE workflow_workspaces),
+ * 退回固定枚举 —— 用退兵验证出来的结论,值得照抄。领域差异以后走标签,不走状态。
+ */
 export const STATUSES = /** @type {const} */ (
-  ['initial', 'researching', 'drafting', 'in_review', 'revising', 'done'])
+  ['backlog', 'todo', 'in_progress', 'in_review', 'done'])
+
+/**
+ * 早期写进日志的状态值 → 现在的值。日志只追加,旧行改不了,只能在读的时候映射。
+ * 不在 validate 里放行这些值:新的写入必须用新枚举。
+ */
+/** @type {Record<string, string>} */
+const LEGACY_STATUS = { initial: 'backlog', researching: 'in_progress', drafting: 'in_progress', revising: 'in_progress' }
 
 /** 操作词表。加新 op 必须同时加折叠分支 —— fold 见到不认识的 op 会抛。 */
 export const OPS = /** @type {const} */ (['create', 'status', 'title', 'archive'])
@@ -55,7 +72,7 @@ export const MAX_LINE_BYTES = 4096
 /** @returns {string} 日志路径。METABOARD_HOME 覆盖默认位置(测试用)。 */
 export function storePath() {
   const home = process.env.METABOARD_HOME ?? join(homedir(), '.metaboard')
-  return join(home, 'topics.jsonl')
+  return join(home, 'works.jsonl')
 }
 
 /**
@@ -67,7 +84,7 @@ function validate(op) {
   if (typeof op !== 'object' || op === null) throw new Error('op must be an object')
   if (!OPS.includes(op.op)) throw new Error(`unknown op: ${JSON.stringify(op.op)}`)
   if (!ACTORS.includes(op.actor)) throw new Error(`unknown actor: ${JSON.stringify(op.actor)}`)
-  if (typeof op.topic !== 'string' || op.topic === '') throw new Error('op.topic must be a non-empty string')
+  if (typeof op.work !== 'string' || op.work === '') throw new Error('op.work must be a non-empty string')
   if (typeof op.ts !== 'string' || Number.isNaN(Date.parse(op.ts))) throw new Error('op.ts must be an ISO timestamp')
   if (op.op === 'create' && (typeof op.title !== 'string' || op.title === '')) {
     throw new Error('create needs a title')
@@ -129,21 +146,32 @@ export function readOps(path = storePath()) {
 }
 
 /**
+ * 操作指向的工作项 id。字段名从 `topic` 改成了 `work`(工作项这个名字是后来定的),
+ * 早期的行还带着旧名 —— 日志只追加,旧行改不了,只能在读的时候认两个名字。
+ * @param {any} op
+ */
+export function opWork(op) {
+  return op.work ?? op.topic
+}
+
+/**
  * 把操作日志折叠成当前状态。
  * @param {any[]} ops
  * @returns {Map<string, any>}
  */
 export function fold(ops) {
   /** @type {Map<string, any>} */
-  const topics = new Map()
+  const works = new Map()
   for (const op of ops) {
+    const id = opWork(op)
+    if (id === undefined) continue
     if (op.op === 'create') {
-      // 重复的 create 不覆盖已有选题:id 由计数器分配,重号只可能是日志被外部改过。
-      if (topics.has(op.topic)) continue
-      topics.set(op.topic, {
-        id: op.topic,
+      // 重复的 create 不覆盖已有工作项:id 由计数器分配,重号只可能是日志被外部改过。
+      if (works.has(id)) continue
+      works.set(id, {
+        id,
         title: op.title,
-        status: 'initial',
+        status: 'backlog',
         actor: op.actor,
         createdAt: op.ts,
         updatedAt: op.ts,
@@ -151,25 +179,28 @@ export function fold(ops) {
       })
       continue
     }
-    const t = topics.get(op.topic)
-    // 指向不存在选题的操作跳过 —— 同样只可能来自外部编辑。
+    const t = works.get(id)
+    // 指向不存在工作项的操作跳过 —— 同样只可能来自外部编辑。
     if (t === undefined) continue
-    if (op.op === 'status') t.status = op.to
+    if (op.op === 'status') t.status = LEGACY_STATUS[op.to] ?? op.to
     else if (op.op === 'title') t.title = op.to
     else if (op.op === 'archive') t.archivedAt = op.ts
     t.updatedAt = op.ts
   }
-  return topics
+  return works
 }
 
 /**
  * 下一个可用 id。取已有最大编号加一 —— 归档掉的号不复用,因为 dsh 事件里的
- * `subject` 引用的正是这个 id,复用会让旧事件挂到新选题上。
- * @param {Map<string, any>} topics
+ * `subject` 引用的正是这个 id,复用会让旧事件挂到新工作项上。
+ *
+ * 前缀 `t` 不承载含义,别去「修」它。工作项这个名字是后来才定的,而那时 t1/t2 已经
+ * 写进不可变的 dsh 事件里(subject: t1)。改前缀等于切断那些链接,换来的只是好看。
+ * @param {Map<string, any>} works
  */
-export function allocateId(topics) {
+export function allocateId(works) {
   let max = 0
-  for (const id of topics.keys()) {
+  for (const id of works.keys()) {
     const m = /^t(\d+)$/.exec(id)
     if (m !== null) max = Math.max(max, Number(m[1]))
   }
@@ -177,13 +208,13 @@ export function allocateId(topics) {
 }
 
 /**
- * 这个 topic id 存在吗。四个内容工具共用这一个判据 —— 各写一份就会漂移,
+ * 这个工作项 id 存在吗。四个内容工具共用这一个判据 —— 各写一份就会漂移,
  * 这个项目已经被「两份实现各自演化」咬过三次。
  *
- * 归档过的选题仍然算存在:归档是看板可见性,不是删除。已经开工的内容还要能继续记录。
+ * 归档过的工作项仍然算存在:归档是看板可见性,不是删除。已经开工的内容还要能继续记录。
  * @param {string} id
  * @param {string} [path]
  */
-export function topicExists(id, path) {
+export function workExists(id, path) {
   return fold(readOps(path)).has(id)
 }

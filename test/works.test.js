@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * C 类存储:选题表。
+ * C 类存储:工作项表。
  *
  * 形态是「只追加的操作日志 + 读时折叠」,不是「存当前值的表」。选这个形态的理由
  * 不是简单,是它让状态变更本身成为事件 —— 于是 dsh 的工作事件和 MetaBoard 的
@@ -18,12 +18,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   STATUSES, MAX_LINE_BYTES, storePath, appendOp, readOps, fold, allocateId,
-} from '../store/topics.mjs'
+} from '../store/works.mjs'
 
 /** 每个用例一个干净的 store 目录,不碰真实的 ~/.metaboard/。 */
 function tempStore() {
   const dir = mkdtempSync(join(tmpdir(), 'metaboard-test-'))
-  return { dir, path: join(dir, 'topics.jsonl'), cleanup: () => rmSync(dir, { recursive: true, force: true }) }
+  return { dir, path: join(dir, 'works.jsonl'), cleanup: () => rmSync(dir, { recursive: true, force: true }) }
 }
 
 const at = (/** @type {number} */ n) => new Date(Date.UTC(2026, 7, 24, 10, n)).toISOString()
@@ -32,24 +32,24 @@ test('storePath 默认在 ~/.metaboard/,可用 METABOARD_HOME 覆盖', () => {
   const saved = process.env.METABOARD_HOME
   try {
     delete process.env.METABOARD_HOME
-    assert.match(storePath(), /\.metaboard\/topics\.jsonl$/)
+    assert.match(storePath(), /\.metaboard\/works\.jsonl$/)
     process.env.METABOARD_HOME = '/tmp/xyz'
-    assert.equal(storePath(), '/tmp/xyz/topics.jsonl')
+    assert.equal(storePath(), '/tmp/xyz/works.jsonl')
   } finally {
     if (saved === undefined) delete process.env.METABOARD_HOME
     else process.env.METABOARD_HOME = saved
   }
 })
 
-test('create 之后折叠出一个选题,状态是 initial', () => {
+test('create 之后折叠出一个工作项,状态是 initial', () => {
   const s = tempStore()
   try {
-    appendOp({ ts: at(1), actor: 'user', topic: 't1', op: 'create', title: '夜跑装备怎么选' }, s.path)
-    const topics = fold(readOps(s.path))
-    assert.equal(topics.size, 1)
-    const t = topics.get('t1')
+    appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: '夜跑装备怎么选' }, s.path)
+    const works = fold(readOps(s.path))
+    assert.equal(works.size, 1)
+    const t = works.get('t1')
     assert.equal(t.title, '夜跑装备怎么选')
-    assert.equal(t.status, 'initial')
+    assert.equal(t.status, 'backlog')
     assert.equal(t.actor, 'user')
     assert.equal(t.createdAt, at(1))
     assert.equal(t.archivedAt, undefined)
@@ -59,10 +59,10 @@ test('create 之后折叠出一个选题,状态是 initial', () => {
 test('折叠取最后一次变更 —— 存的是变更,不是当前值', () => {
   const s = tempStore()
   try {
-    appendOp({ ts: at(1), actor: 'user', topic: 't1', op: 'create', title: '初名' }, s.path)
-    appendOp({ ts: at(2), actor: 'agent', topic: 't1', op: 'status', from: 'initial', to: 'drafting' }, s.path)
-    appendOp({ ts: at(3), actor: 'user', topic: 't1', op: 'title', to: '改过的名' }, s.path)
-    appendOp({ ts: at(4), actor: 'user', topic: 't1', op: 'status', from: 'drafting', to: 'in_review' }, s.path)
+    appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: '初名' }, s.path)
+    appendOp({ ts: at(2), actor: 'agent', work: 't1', op: 'status', from: 'backlog', to: 'in_progress' }, s.path)
+    appendOp({ ts: at(3), actor: 'user', work: 't1', op: 'title', to: '改过的名' }, s.path)
+    appendOp({ ts: at(4), actor: 'user', work: 't1', op: 'status', from: 'in_progress', to: 'in_review' }, s.path)
     const t = fold(readOps(s.path)).get('t1')
     assert.equal(t.title, '改过的名')
     assert.equal(t.status, 'in_review')
@@ -72,11 +72,11 @@ test('折叠取最后一次变更 —— 存的是变更,不是当前值', () =>
   } finally { s.cleanup() }
 })
 
-test('archive 是软归档:选题还在,只是带上 archivedAt', () => {
+test('archive 是软归档:工作项还在,只是带上 archivedAt', () => {
   const s = tempStore()
   try {
-    appendOp({ ts: at(1), actor: 'user', topic: 't1', op: 'create', title: 'x' }, s.path)
-    appendOp({ ts: at(2), actor: 'user', topic: 't1', op: 'archive' }, s.path)
+    appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: 'x' }, s.path)
+    appendOp({ ts: at(2), actor: 'user', work: 't1', op: 'archive' }, s.path)
     const t = fold(readOps(s.path)).get('t1')
     assert.equal(t.archivedAt, at(2))
     assert.equal(t.title, 'x', '归档不该丢掉任何信息')
@@ -87,10 +87,10 @@ test('id 由计数器分配,单调递增,不复用归档掉的号', () => {
   const s = tempStore()
   try {
     assert.equal(allocateId(fold(readOps(s.path))), 't1')
-    appendOp({ ts: at(1), actor: 'user', topic: 't1', op: 'create', title: 'a' }, s.path)
+    appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: 'a' }, s.path)
     assert.equal(allocateId(fold(readOps(s.path))), 't2')
-    appendOp({ ts: at(2), actor: 'agent', topic: 't2', op: 'create', title: 'b' }, s.path)
-    appendOp({ ts: at(3), actor: 'user', topic: 't2', op: 'archive' }, s.path)
+    appendOp({ ts: at(2), actor: 'agent', work: 't2', op: 'create', title: 'b' }, s.path)
+    appendOp({ ts: at(3), actor: 'user', work: 't2', op: 'archive' }, s.path)
     assert.equal(allocateId(fold(readOps(s.path))), 't3', '归档掉的号不能被重新分配')
   } finally { s.cleanup() }
 })
@@ -98,11 +98,11 @@ test('id 由计数器分配,单调递增,不复用归档掉的号', () => {
 test('actor 记下来 —— 垃圾卡靠它筛', () => {
   const s = tempStore()
   try {
-    appendOp({ ts: at(1), actor: 'user', topic: 't1', op: 'create', title: '真选题' }, s.path)
-    appendOp({ ts: at(2), actor: 'agent', topic: 't2', op: 'create', title: 'topic:probe' }, s.path)
-    const topics = fold(readOps(s.path))
-    assert.equal(topics.get('t1').actor, 'user')
-    assert.equal(topics.get('t2').actor, 'agent')
+    appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: '真工作项' }, s.path)
+    appendOp({ ts: at(2), actor: 'agent', work: 't2', op: 'create', title: 'topic:probe' }, s.path)
+    const works = fold(readOps(s.path))
+    assert.equal(works.get('t1').actor, 'user')
+    assert.equal(works.get('t2').actor, 'agent')
   } finally { s.cleanup() }
 })
 
@@ -111,30 +111,30 @@ test('actor 记下来 —— 垃圾卡靠它筛', () => {
 test('状态必须是枚举里的值,不是自由字符串', () => {
   const s = tempStore()
   try {
-    appendOp({ ts: at(1), actor: 'user', topic: 't1', op: 'create', title: 'x' }, s.path)
+    appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: 'x' }, s.path)
     assert.throws(
-      () => appendOp({ ts: at(2), actor: 'user', topic: 't1', op: 'status', from: 'initial', to: '随便写' }, s.path),
+      () => appendOp({ ts: at(2), actor: 'user', work: 't1', op: 'status', from: 'backlog', to: '随便写' }, s.path),
       /status/,
     )
-    assert.deepEqual(STATUSES, ['initial', 'researching', 'drafting', 'in_review', 'revising', 'done'])
+    assert.deepEqual(STATUSES, ['backlog', 'todo', 'in_progress', 'in_review', 'done'])
   } finally { s.cleanup() }
 })
 
 test('未知 op 直接抛,不写进日志', () => {
   const s = tempStore()
   try {
-    assert.throws(() => appendOp({ ts: at(1), actor: 'user', topic: 't1', op: 'nonesuch' }, s.path), /op/)
+    assert.throws(() => appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'nonesuch' }, s.path), /op/)
     assert.deepEqual(readOps(s.path), [], '抛错的操作不能留下半行')
   } finally { s.cleanup() }
 })
 
-// 这条钉的是纪律,不是原子性。理由见 store/topics.mjs 里 MAX_LINE_BYTES 的注释:
+// 这条钉的是纪律,不是原子性。理由见 store/works.mjs 里 MAX_LINE_BYTES 的注释:
 // 4096 来自 PIPE_BUF,那是管道的保证,不是普通文件的。留这条上限是为了强制
 // 「内容不进 C 类日志」,顺带让日志能被人直接读。
 test('单行超过 4096 字节必须抛错,不能写进去', () => {
   const s = tempStore()
   try {
-    const huge = { ts: at(1), actor: 'user', topic: 't1', op: 'create', title: 'x'.repeat(MAX_LINE_BYTES) }
+    const huge = { ts: at(1), actor: 'user', work: 't1', op: 'create', title: 'x'.repeat(MAX_LINE_BYTES) }
     assert.throws(() => appendOp(huge, s.path), /4096|字节|bytes/)
     assert.deepEqual(readOps(s.path), [])
   } finally { s.cleanup() }
@@ -145,7 +145,7 @@ test('内容不该进 C 类日志 —— 正文放 dsh 的信封里', () => {
   // 一旦有人想往里塞正文,4096 那条会先拦住他。
   const s = tempStore()
   try {
-    const article = { ts: at(1), actor: 'user', topic: 't1', op: 'create', title: '标题', draft: '正文'.repeat(2000) }
+    const article = { ts: at(1), actor: 'user', work: 't1', op: 'create', title: '标题', draft: '正文'.repeat(2000) }
     assert.throws(() => appendOp(article, s.path), /4096|字节|bytes/)
   } finally { s.cleanup() }
 })
@@ -161,11 +161,11 @@ test('读一个还不存在的日志:空数组,不抛', () => {
 test('损坏的行被跳过,不让整个看板崩掉', () => {
   const s = tempStore()
   try {
-    appendOp({ ts: at(1), actor: 'user', topic: 't1', op: 'create', title: 'a' }, s.path)
+    appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: 'a' }, s.path)
     writeFileSync(s.path, readFileSync(s.path, 'utf8') + '{这不是 JSON\n')
-    appendOp({ ts: at(2), actor: 'user', topic: 't2', op: 'create', title: 'b' }, s.path)
-    const topics = fold(readOps(s.path))
-    assert.equal(topics.size, 2, '一行坏了不该带走其余的行')
+    appendOp({ ts: at(2), actor: 'user', work: 't2', op: 'create', title: 'b' }, s.path)
+    const works = fold(readOps(s.path))
+    assert.equal(works.size, 2, '一行坏了不该带走其余的行')
   } finally { s.cleanup() }
 })
 
@@ -181,12 +181,12 @@ test('两个真进程并发追加 400 行,一行不丢、一行不坏', async ()
   const s = tempStore()
   try {
     const worker = `
-      import { appendOp } from '${new URL('../store/topics.mjs', import.meta.url).href}'
+      import { appendOp } from '${new URL('../store/works.mjs', import.meta.url).href}'
       const [path, tag] = process.argv.slice(2)
       for (let i = 0; i < 200; i++) {
         appendOp({ ts: new Date(Date.UTC(2026, 7, 24, 10, 0, i)).toISOString(),
-                   actor: 'user', topic: tag + i, op: 'create',
-                   title: tag + ' 的第 ' + i + ' 个选题，标题拉长一点更容易撞出交错：' + 'x'.repeat(200) }, path)
+                   actor: 'user', work: tag + i, op: 'create',
+                   title: tag + ' 的第 ' + i + ' 个工作项，标题拉长一点更容易撞出交错：' + 'x'.repeat(200) }, path)
       }
     `
     const workerPath = join(s.dir, 'worker.mjs')
@@ -204,7 +204,7 @@ test('两个真进程并发追加 400 行,一行不丢、一行不坏', async ()
     for (const [i, line] of raw.entries()) {
       assert.doesNotThrow(() => JSON.parse(line), `第 ${i + 1} 行不是完整 JSON,发生了交错:\n${line.slice(0, 120)}`)
     }
-    const topics = fold(readOps(s.path))
-    assert.equal(topics.size, 400)
+    const works = fold(readOps(s.path))
+    assert.equal(works.size, 400)
   } finally { s.cleanup() }
 })

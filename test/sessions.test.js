@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { zstdCompressSync } from 'node:zlib'
-import { listSessionLogs, readSessionEvents, collectWork, workSummary } from '../store/sessions.mjs'
+import { listSessionLogs, readSessionEvents, collectEvents, eventSummary } from '../store/sessions.mjs'
 
 const fixture = (/** @type {string} */ name) =>
   JSON.parse(readFileSync(fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url)), 'utf8'))
@@ -73,14 +73,14 @@ test('压缩格式不对的文件被跳过,不带走别的会话', async () => {
   } finally { s.cleanup() }
 })
 
-// ─────────────────────── 按选题收集 ───────────────────────
+// ─────────────────────── 按工作项收集 ───────────────────────
 
-test('collectWork:只取该选题的信封,按时间排序', async () => {
+test('collectEvents:只取该工作项的信封,按时间排序', async () => {
   const events = fixture('session-full-chain.json').events
   const s = tempSessions([{ id: 'session-real', events }])
   try {
     // 这份夹具是第一阶段采的,subject 还是当年的字符串形态。
-    const work = await collectWork('topic:fixture', s.root)
+    const work = await collectEvents('topic:fixture', s.root)
     assert.ok(work.length >= 4, `应当收到完整链路,实际 ${work.length} 条`)
     const kinds = work.map((w) => w.kind)
     assert.deepEqual(kinds, ['research', 'draft', 'review', 'revise'])
@@ -91,42 +91,42 @@ test('collectWork:只取该选题的信封,按时间排序', async () => {
   } finally { s.cleanup() }
 })
 
-test('collectWork:别的选题的事件不混进来', async () => {
+test('collectEvents:别的工作项的事件不混进来', async () => {
   const s = tempSessions([
     { id: 'a', events: fixture('session-full-chain.json').events },
     { id: 'b', events: fixture('session-business-failure.json').events },
   ])
   try {
-    const a = await collectWork('topic:fixture', s.root)
-    const b = await collectWork('topic:bizfail', s.root)
+    const a = await collectEvents('topic:fixture', s.root)
+    const b = await collectEvents('topic:bizfail', s.root)
     assert.ok(a.length > 0 && b.length > 0)
     assert.equal(a.every((w) => w.sessionId === 'a'), true)
     assert.equal(b.every((w) => w.sessionId === 'b'), true)
   } finally { s.cleanup() }
 })
 
-test('collectWork:跨会话的同一个选题会被合到一起', async () => {
+test('collectEvents:跨会话的同一个工作项会被合到一起', async () => {
   const chain = fixture('session-full-chain.json').events
-  // 同一份事件放进两个会话,模拟一个选题跨会话推进。
+  // 同一份事件放进两个会话,模拟一个工作项跨会话推进。
   const s = tempSessions([{ id: 'earlier', events: chain }, { id: 'later', events: chain }])
   try {
-    const work = await collectWork('topic:fixture', s.root)
+    const work = await collectEvents('topic:fixture', s.root)
     const sessions = new Set(work.map((w) => w.sessionId))
     assert.equal(sessions.size, 2, '跨会话聚合没生效 —— 这是任务对象存在的理由')
   } finally { s.cleanup() }
 })
 
-test('collectWork:不认识的选题返回空,不抛', async () => {
+test('collectEvents:不认识的工作项返回空,不抛', async () => {
   const s = tempSessions([{ id: 'a', events: fixture('session-full-chain.json').events }])
   try {
-    assert.deepEqual(await collectWork('t999', s.root), [])
+    assert.deepEqual(await collectEvents('t999', s.root), [])
   } finally { s.cleanup() }
 })
 
-test('collectWork:derivedFrom 与 payload 原样带出来', async () => {
+test('collectEvents:derivedFrom 与 payload 原样带出来', async () => {
   const s = tempSessions([{ id: 'a', events: fixture('session-full-chain.json').events }])
   try {
-    const work = await collectWork('topic:fixture', s.root)
+    const work = await collectEvents('topic:fixture', s.root)
     const revise = work.find((w) => w.kind === 'revise')
     assert.ok(revise !== undefined)
     assert.equal(revise.derivedFrom.length, 2, 'revise 引用了 draft 与 review')
@@ -134,13 +134,13 @@ test('collectWork:derivedFrom 与 payload 原样带出来', async () => {
   } finally { s.cleanup() }
 })
 
-test('workSummary:一次扫描出全部选题的活儿量', async () => {
+test('eventSummary:一次扫描出全部工作项的活儿量', async () => {
   const s = tempSessions([
     { id: 'a', events: fixture('session-full-chain.json').events },
     { id: 'b', events: fixture('session-business-failure.json').events },
   ])
   try {
-    const by = await workSummary(s.root)
+    const by = await eventSummary(s.root)
     assert.ok(by.has('topic:fixture'))
     assert.ok(by.has('topic:bizfail'))
     assert.equal(by.get('topic:fixture').count, 4)
