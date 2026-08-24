@@ -456,10 +456,18 @@ const argsErrorResult = (/** @type {string} */ callId) =>
   wrap('tool/result', resultData(callId, {
     isError: true, text: 'Error: invalid arguments: missing required property "notes"',
   }))
-const reviewMessage = () => wrap('user/message', {
+/**
+ * 评审工具写进对话的那条消息。source.callId 是 lib/tools/review.js 真实写出的字段 ——
+ * 它把「这条评审出自哪次调用」写成数据,渲染层据此判断评审行是否存在。
+ * @param {string} [callId]
+ */
+const reviewMessage = (callId = 'r1') => wrap('user/message', {
   role: 'user',
   content: [{ type: 'text', text: '[人工评审 · reject] 开头太平' }],
-  source: { kind: 'plugin', plugin: 'metaboard', form: 'notice', summary: '人工评审 · 打回' },
+  source: {
+    kind: 'plugin', plugin: 'metaboard', form: 'notice',
+    summary: '人工评审 · 打回', callId,
+  },
 })
 
 const DRAFT_META = { subject: 'topic:x', kind: 'draft', derivedFrom: ['c1'], payload: { title: '标题' } }
@@ -719,7 +727,7 @@ test('行表:referenceOnly 的行不显示 —— 一次评审只出一行', () 
   })
   const reviewMsg = {
     key: 'metaboard-review:340', kind: 'metaboard-review', id: '340', target: 'metaboard',
-    data: { seq: 340, at: 3, summary: '人工评审 · 打回', text: '[人工评审 · reject] 开头太平' },
+    data: { seq: 340, at: 3, callId: 'r1', summary: '人工评审 · 打回', text: '[人工评审 · reject] 开头太平' },
   }
   const rows = renderedRows({ rows: [reviewCall, reviewMsg], bySubject: {} })
   assert.equal(rows.length, 1)
@@ -743,19 +751,39 @@ test('行表:失败的评审调用行必须显示 —— 否则整次失败在�
   assert.match(rows[0], /没有信封/)
 })
 
-test('行表:在飞的评审调用行可见,完成后才被抑制(R20 的代价)', () => {
+// 抑制的条件是「评审行确实存在」,不是「这次调用成功了」。后者只是前者的旁证 ——
+// 在当前实现下碰巧等价(评审行来自 execute 里 deferContext 写的消息)。这条测试钉的是
+// 前者:一个成功但评审行不存在的调用,照样必须显示。旁证版本在这一条上会漏。
+test('行表:抑制取决于评审行在不在,不取决于这次调用成没成', () => {
+  const doneCall = callRow({
+    callId: 'r8', tool: 'metaboard_review', turn: 1, step: 1, startedAt: 1, endedAt: 2,
+    status: 'done', subject: 'topic:x', contentKind: 'review', derivedFrom: [],
+    payload: { decision: 'approve' }, referenceOnly: true,
+  })
+  const reviewRow = {
+    key: 'metaboard-review:9', kind: 'metaboard-review', id: '9', target: 'metaboard',
+    data: { seq: 9, at: 3, callId: 'r8', summary: '人工评审 · 通过', text: '[人工评审 · accept] 可以' },
+  }
+
+  // 评审行在 → 调用行被抑制,一次评审只出一行。
+  assert.equal(renderedRows({ rows: [doneCall, reviewRow], bySubject: {} }).length, 1)
+
+  // 评审行不在 → 调用行必须显示,哪怕这次调用是 done。
+  assert.equal(renderedRows({ rows: [doneCall], bySubject: {} }).length, 1)
+
+  // 在飞的调用同理:评审行还没产出,这一行可见。
   const running = callRow({
     callId: 'r8', tool: 'metaboard_review', turn: 1, step: 1, startedAt: 1,
     status: 'running', referenceOnly: true,
   })
   assert.equal(renderedRows({ rows: [running], bySubject: {} }).length, 1)
 
-  const done = callRow({
-    callId: 'r8', tool: 'metaboard_review', turn: 1, step: 1, startedAt: 1, endedAt: 2,
-    status: 'done', subject: 'topic:x', contentKind: 'review', derivedFrom: [],
-    payload: { decision: 'approve' }, referenceOnly: true,
-  })
-  assert.equal(renderedRows({ rows: [done], bySubject: {} }).length, 0)
+  // 另一次评审的行不算数 —— 按 callId 匹配,不是「有评审行就行」。
+  const otherReview = {
+    key: 'metaboard-review:10', kind: 'metaboard-review', id: '10', target: 'metaboard',
+    data: { seq: 10, at: 4, callId: 'r-other', summary: '人工评审 · 通过', text: '别的' },
+  }
+  assert.equal(renderedRows({ rows: [doneCall, otherReview], bySubject: {} }).length, 2)
 })
 
 test('行表:引用的目标没有信封时退到工具名,不渲染字面量 undefined(M2)', () => {
