@@ -17,7 +17,8 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  STATUSES, MAX_LINE_BYTES, storePath, appendOp, readOps, fold, allocateId,
+  STATUSES, MAIN_STATUSES, SECONDARY_STATUSES, STATUS_LABEL, AGENT_FORBIDDEN,
+  MAX_LINE_BYTES, storePath, appendOp, readOps, fold, allocateId, workState,
 } from '../store/works.mjs'
 
 /** 每个用例一个干净的 store 目录,不碰真实的 ~/.metaboard/。 */
@@ -116,7 +117,8 @@ test('状态必须是枚举里的值,不是自由字符串', () => {
       () => appendOp({ ts: at(2), actor: 'user', work: 't1', op: 'status', from: 'backlog', to: '随便写' }, s.path),
       /status/,
     )
-    assert.deepEqual(STATUSES, ['backlog', 'todo', 'in_progress', 'in_review', 'done'])
+    assert.deepEqual(STATUSES,
+      ['backlog', 'todo', 'in_progress', 'blocked', 'in_review', 'done', 'canceled'])
   } finally { s.cleanup() }
 })
 
@@ -206,5 +208,41 @@ test('两个真进程并发追加 400 行,一行不丢、一行不坏', async ()
     }
     const works = fold(readOps(s.path))
     assert.equal(works.size, 400)
+  } finally { s.cleanup() }
+})
+
+// ─────────────────────── 看板/二级的划分 ───────────────────────
+
+test('看板只放已授权的流水线,待立项与完成收在别处', () => {
+  // 照 dashi 的 MAIN_STATUSES / SECONDARY_STATUSES 划分。
+  assert.deepEqual([...MAIN_STATUSES], ['todo', 'in_progress', 'blocked', 'in_review'])
+  assert.deepEqual([...SECONDARY_STATUSES], ['backlog', 'done', 'canceled'])
+  // 两边合起来必须正好是全集,不能有状态无处安放。
+  assert.deepEqual([...MAIN_STATUSES, ...SECONDARY_STATUSES].sort(), [...STATUSES].sort())
+})
+
+test('每个状态都有中文标签 —— 界面上不该出现裸的英文枚举值', () => {
+  for (const s of STATUSES) assert.equal(typeof STATUS_LABEL[s], 'string', `${s} 没有标签`)
+})
+
+test('agent 不能宣布完成', () => {
+  // dashi 的 AGENTS.md:"Never move an issue to `done` unless the user explicitly
+  // accepts it",批次完成检查里还专门要求"changed issues are in in_review, not done"。
+  assert.deepEqual([...AGENT_FORBIDDEN], ['done'])
+  assert.equal(AGENT_FORBIDDEN.includes('blocked'), false, 'agent 该能说自己卡住了')
+  assert.equal(AGENT_FORBIDDEN.includes('canceled'), false, 'agent 该能说这事不做了')
+})
+
+test('workState:未立项与取消都拒绝,其余放行并带回当前状态', () => {
+  const s = tempStore()
+  try {
+    const mk = (/** @type {string} */ id, /** @type {string} */ status) =>
+      appendOp({ ts: at(1), actor: 'user', work: id, op: 'create', title: id, status }, s.path)
+    mk('a', 'backlog'); mk('b', 'todo'); mk('c', 'canceled'); mk('d', 'in_review')
+    assert.equal(workState('a', s.path).ok, false)
+    assert.equal(workState('c', s.path).ok, false)
+    assert.deepEqual(workState('b', s.path), { ok: true, status: 'todo' })
+    assert.deepEqual(workState('d', s.path), { ok: true, status: 'in_review' })
+    assert.equal(workState('nope', s.path).ok, false)
   } finally { s.cleanup() }
 })

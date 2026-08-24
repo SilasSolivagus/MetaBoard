@@ -27,27 +27,62 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 /**
- * 工作项在流程里的位置。**通用取值,不带领域行话** —— 这一条改过一次:
- * 最初写的是 initial/researching/drafting/in_review/revising/done,那是内容生产的
- * 行话,而且和事件的 kind(research/draft/revise)重复了。状态说的是「这活儿在你的
- * 流程里走到哪」,kind 说的是「干了什么」,两件事。混在一起,换个领域(法务审查、
- * 调研报告)就得改 schema,而 spec 第 1 节写的终点是通用产品。
+ * 工作项在流程里的位置。整套照搬参照项目 dashi-taskboard —— 状态集、看板/二级的
+ * 划分、以及谁能把它挪到哪里,都跟它一致。
  *
- * 形式照 dashi(CHECK 式固定枚举)。dashi 试过让每个项目自定义工作流,后来把整套
- * 删掉了(0009_remove_workflow_schema.sql:DROP TABLE workflow_workspaces),
- * 退回固定枚举 —— 用退兵验证出来的结论,值得照抄。领域差异以后走标签,不走状态。
+ * 这一条改过两次,值得记下来:
+ *
+ * 第一版写的是 initial/researching/drafting/in_review/revising/done。那是内容生产的
+ * 行话,而且和事件的 kind 重复了(状态说「在流程里走到哪」,kind 说「干了什么」)。
+ *
+ * 第二版我想砍掉 backlog 与 todo 的区分,理由是「一个人写东西没有迭代规划的仪式,
+ * 这条线没有触发时刻,会腐烂」。去读了 dashi 才发现推错了原因 —— 那条线的意义不是
+ * 计划,是**授权**。它的 SKILL.md 写得很直:
+ *
+ *   Treat `backlog` as not approved for execution. Unless the user explicitly
+ *   authorizes that issue, do not claim it, move it to another status, or
+ *   perform task work.
+ *
+ * 立项之前 agent 什么都不许干,立项之后任何 agent 都能来接。这条线有后果,所以不会烂。
+ * 我们这里把它做得比 dashi 更硬:dashi 靠 prompt 里的规矩约束 agent,我们让工具直接
+ * 拒绝未立项的工作项(见 lib/tools/*.js 的 workState 校验)。规矩变成机制。
  */
 export const STATUSES = /** @type {const} */ (
-  ['backlog', 'todo', 'in_progress', 'in_review', 'done'])
+  ['backlog', 'todo', 'in_progress', 'blocked', 'in_review', 'done', 'canceled'])
+
+/** 看板上的四列。照 dashi 的 MAIN_STATUSES —— 看板只放已授权的流水线。 */
+export const MAIN_STATUSES = /** @type {const} */ (['todo', 'in_progress', 'blocked', 'in_review'])
+
+/** 不上看板的:待立项、完成、取消。收在别处,免得看板变成堆场。 */
+export const SECONDARY_STATUSES = /** @type {const} */ (['backlog', 'done', 'canceled'])
+
+/** 中文标签,沿用 dashi 的措辞 —— 它的用词比通用译法准。 */
+export const STATUS_LABEL = /** @type {Record<string, string>} */ ({
+  backlog: '待立项',
+  todo: '等待认领',
+  in_progress: '处理中',
+  blocked: '遇到阻碍',
+  in_review: '等你确认',
+  done: '完成',
+  canceled: '取消',
+})
+
+/**
+ * agent 不能自己设的状态。照 dashi 的 AGENTS.md:
+ * "Never move an issue to `done` unless the user explicitly accepts it."
+ * 它的批次完成检查里还专门有一条 "changed issues are in `in_review`, not `done`"。
+ * agent 可以设 blocked(干不下去)和 canceled(不打算干了),但**不能宣布完成**。
+ */
+export const AGENT_FORBIDDEN = /** @type {const} */ (['done'])
 
 /**
  * 早期写进日志的状态值 → 现在的值。日志只追加,旧行改不了,只能在读的时候映射。
- * 不在 validate 里放行这些值:新的写入必须用新枚举。
+ * 不在 validate 里放行这些值:新的写入必须用现行枚举。
+ * @type {Record<string, string>}
  */
-/** @type {Record<string, string>} */
 const LEGACY_STATUS = { initial: 'backlog', researching: 'in_progress', drafting: 'in_progress', revising: 'in_progress' }
 
-/** 操作词表。加新 op 必须同时加折叠分支 —— fold 见到不认识的 op 会抛。 */
+/** 操作词表。加新 op 必须同时加折叠分支 —— fold 见到不认识的 op 会跳过。 */
 export const OPS = /** @type {const} */ (['create', 'status', 'title', 'archive'])
 
 export const ACTORS = /** @type {const} */ (['user', 'agent'])
@@ -86,8 +121,13 @@ function validate(op) {
   if (!ACTORS.includes(op.actor)) throw new Error(`unknown actor: ${JSON.stringify(op.actor)}`)
   if (typeof op.work !== 'string' || op.work === '') throw new Error('op.work must be a non-empty string')
   if (typeof op.ts !== 'string' || Number.isNaN(Date.parse(op.ts))) throw new Error('op.ts must be an ISO timestamp')
-  if (op.op === 'create' && (typeof op.title !== 'string' || op.title === '')) {
-    throw new Error('create needs a title')
+  if (op.op === 'create') {
+    if (typeof op.title !== 'string' || op.title === '') throw new Error('create needs a title')
+    // 建项路径决定初始状态,而路径本身就编码了授权:
+    // 你在 CLI 里记下一个想法 → 待立项;agent 在对话里建 → 你刚开口要了,即已授权。
+    if (op.status !== undefined && !STATUSES.includes(op.status)) {
+      throw new Error(`unknown status: ${JSON.stringify(op.status)}`)
+    }
   }
   if (op.op === 'title' && (typeof op.to !== 'string' || op.to === '')) throw new Error('title needs `to`')
   if (op.op === 'status') {
@@ -171,7 +211,7 @@ export function fold(ops) {
       works.set(id, {
         id,
         title: op.title,
-        status: 'backlog',
+        status: op.status ?? 'backlog',
         actor: op.actor,
         createdAt: op.ts,
         updatedAt: op.ts,
@@ -208,13 +248,35 @@ export function allocateId(works) {
 }
 
 /**
- * 这个工作项 id 存在吗。四个内容工具共用这一个判据 —— 各写一份就会漂移,
- * 这个项目已经被「两份实现各自演化」咬过三次。
+ * 工作项当前的状态,给工具做准入判断用。四个内容工具共用这一个判据 ——
+ * 各写一份就会漂移,这个项目已经被「两份实现各自演化」咬过三次。
  *
  * 归档过的工作项仍然算存在:归档是看板可见性,不是删除。已经开工的内容还要能继续记录。
+ *
  * @param {string} id
  * @param {string} [path]
+ * @returns {{ ok: true, status: string } | { ok: false, reason: string }}
  */
-export function workExists(id, path) {
-  return fold(readOps(path)).has(id)
+export function workState(id, path) {
+  const w = fold(readOps(path)).get(id)
+  if (w === undefined) return { ok: false, reason: `unknown work item: ${id}` }
+  if (w.status === 'backlog') {
+    // 立项这条线在这里长出牙齿。dashi 靠 prompt 约束 agent 不许碰未立项的条目;
+    // 我们直接拒绝 —— 规矩变成机制,agent 想违反也做不到。
+    return { ok: false, reason: `${id} is not approved for execution (待立项). Ask the person to approve it first; do not start work on it.` }
+  }
+  if (w.status === 'canceled') return { ok: false, reason: `${id} was canceled (取消)` }
+  return { ok: true, status: w.status }
+}
+
+/**
+ * 认领:把 todo 挪成 in_progress。内容工具第一次在这个工作项上干活时调用 ——
+ * 这就是 dashi 里 agent 显式 claim 的等价动作,只是由工具替它做,不靠它记得。
+ * @param {string} id
+ * @param {string} from
+ * @param {string} [path]
+ */
+export function claim(id, from, path) {
+  if (from !== 'todo') return
+  appendOp({ ts: new Date().toISOString(), actor: 'agent', work: id, op: 'status', from, to: 'in_progress' }, path)
 }

@@ -7,7 +7,8 @@
  * 「跨进程的数据路径」——外部程序读 dsh 的日志、写自己的选题表、把两条线并起来。
  * 那条路通不通,用 CLI 就能验完;先堆界面只会把风险推后。
  */
-import { readOps, fold, appendOp, allocateId, storePath, STATUSES, opWork } from '../store/works.mjs'
+import { readOps, fold, appendOp, allocateId, storePath, STATUSES, MAIN_STATUSES,
+  SECONDARY_STATUSES, STATUS_LABEL, opWork } from '../store/works.mjs'
 import { collectEvents, eventSummary, sessionRoot } from '../store/sessions.mjs'
 import { mergeTimeline, describe } from '../store/timeline.mjs'
 
@@ -20,8 +21,9 @@ const hhmm = (/** @type {number} */ ms) => {
 
 function usage() {
   console.log(`用法：
-  metaboard new <标题>              开一个工作项，打印分配到的 id
-  metaboard ls [--all]              看板：按状态分列（默认不显示已归档）
+  metaboard new <标题>              记一个想法，落在「待立项」
+  metaboard approve <id>            立项：允许 agent 开始做这件事
+  metaboard ls [--all]              看板：只显示已立项的流水线（--all 连待立项/完成一起列）
   metaboard show <id>               这个工作项的完整时间线（状态变更 + 会话事件）
   metaboard status <id> <状态>       状态取值：${STATUSES.join(' / ')}
   metaboard rename <id> <新标题>
@@ -43,8 +45,10 @@ async function main(argv) {
     const title = rest.join(' ').trim()
     if (title === '') return fail('要给工作项一个标题：metaboard new <标题>')
     const id = allocateId(works)
-    appendOp({ ts: now(), actor: 'user', work: id, op: 'create', title })
-    console.log(`${id}  ${title}`)
+    // 你在这里记下的是想法,不是任务 —— 落在待立项,agent 碰不到,
+    // 直到你 approve。agent 在对话里建的项走另一条路,直接是等待认领。
+    appendOp({ ts: now(), actor: 'user', work: id, op: 'create', title, status: 'backlog' })
+    console.log(`${id}  ${title}\n待立项。想让 agent 做，先 metaboard approve ${id}`)
     return
   }
 
@@ -56,10 +60,21 @@ async function main(argv) {
       console.log('还没有工作项。用 metaboard new <标题> 开一个。')
       return
     }
-    for (const status of STATUSES) {
+    // 看板只放已授权的流水线;待立项、完成、取消收在 --all 里。
+    // 照 dashi 的 MAIN/SECONDARY 划分 —— 看板不该变成堆场。
+    const cols = showAll ? [...MAIN_STATUSES, ...SECONDARY_STATUSES] : MAIN_STATUSES
+    // 空态要说话。看板上一个都没有,和「一个工作项都没有」是两回事 ——
+    // 前者常见得多:东西都做完了,或者都还没立项。
+    if (!alive.some((t) => cols.includes(t.status))) {
+      const pend = alive.filter((t) => t.status === 'backlog').length
+      console.log(showAll ? '还没有工作项。用 metaboard new <标题> 记一个。'
+        : `看板上没有在办的工作项。${pend ? `有 ${pend} 个待立项，metaboard approve <id> 放行。` : '用 metaboard new <标题> 记一个。'}`)
+      return
+    }
+    for (const status of cols) {
       const inCol = alive.filter((t) => t.status === status)
       if (inCol.length === 0) continue
-      console.log(`\n${status}`)
+      console.log(`\n${STATUS_LABEL[status]}`)
       for (const t of inCol) {
         const w = summary.get(t.id)
         const tail = w === undefined ? '尚无会话记录' : `${w.count} 条会话记录，最后 ${hhmm(w.lastAt)}`
@@ -77,7 +92,7 @@ async function main(argv) {
     const ops = readOps().filter((o) => opWork(o) === id)
     const events = await collectEvents(/** @type {string} */ (id))
     console.log(`${t.id}  ${t.title}`)
-    console.log(`状态 ${t.status}${t.archivedAt === undefined ? '' : '（已归档）'}   由 ${t.actor} 建立`)
+    console.log(`${STATUS_LABEL[t.status] ?? t.status}${t.archivedAt === undefined ? '' : '（已归档）'}   由 ${t.actor} 建立`)
     if (events.length === 0) {
       console.log('\n还没有会话记录。在 dsh 里用 metaboard 工具做事，这里就会出现。')
     }
@@ -90,15 +105,25 @@ async function main(argv) {
     return
   }
 
+  if (cmd === 'approve') {
+    const id = rest[0]
+    const t = id === undefined ? undefined : works.get(id)
+    if (t === undefined) return fail(`没有这个工作项：${id ?? '(未指定)'}`)
+    if (t.status !== 'backlog') return fail(`${id} 已经立过项了（现在是${STATUS_LABEL[t.status]}）`)
+    appendOp({ ts: now(), actor: 'user', work: id, op: 'status', from: 'backlog', to: 'todo' })
+    console.log(`${id} 已立项，agent 可以来接了。`)
+    return
+  }
+
   if (cmd === 'status') {
     const [id, to] = rest
     const t = id === undefined ? undefined : works.get(id)
     if (t === undefined) return fail(`没有这个工作项：${id ?? '(未指定)'}`)
     if (!STATUSES.includes(/** @type {any} */ (to))) {
-      return fail(`状态只能是：${STATUSES.join(' / ')}`)
+      return fail(`状态只能是：${STATUSES.map((x) => `${x}(${STATUS_LABEL[x]})`).join(' / ')}`)
     }
     appendOp({ ts: now(), actor: 'user', work: id, op: 'status', from: t.status, to })
-    console.log(`${id}  ${t.status} → ${to}`)
+    console.log(`${id}  ${STATUS_LABEL[t.status]} → ${STATUS_LABEL[to]}`)
     return
   }
 

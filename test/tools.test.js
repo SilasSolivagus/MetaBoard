@@ -19,7 +19,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { appendOp, readOps, fold } from '../store/works.mjs'
+import { appendOp, readOps, fold, workState } from '../store/works.mjs'
 import { workTool } from '../lib/tools/work.js'
 import { researchTool } from '../lib/tools/research.js'
 import { draftTool } from '../lib/tools/draft.js'
@@ -38,11 +38,15 @@ async function withStore(body) {
   const saved = process.env.METABOARD_HOME
   process.env.METABOARD_HOME = dir
   let n = 0
-  const mk = (/** @type {string} */ title = '测试工作项') => {
+  /**
+   * 建一个已立项(等待认领)的工作项 —— 工具能在上面干活。
+   * 传 'backlog' 就是未立项,用来验准入那道门。
+   */
+  const mk = (/** @type {string} */ title = '测试工作项', /** @type {string} */ status = 'todo') => {
     const id = `t${++n}`
     appendOp({
       ts: new Date(Date.UTC(2026, 7, 24, 10, n)).toISOString(),
-      actor: 'user', work: id, op: 'create', title,
+      actor: 'user', work: id, op: 'create', title, status,
     })
     return id
   }
@@ -65,7 +69,8 @@ test('work:分配 id 并写进 store,actor 记成 agent', () => withStore(async 
   const t = fold(readOps()).get('t1')
   assert.equal(t.title, '夜跑装备怎么选')
   assert.equal(t.actor, 'agent', '模型建的工作项要记成 agent —— 垃圾卡靠这个筛')
-  assert.equal(t.status, 'backlog')
+  assert.equal(t.status, 'todo',
+    'agent 在对话里建项,说明人刚开口要了这件事;那句话就是授权,不该落在待立项')
 }))
 
 test('work:id 是分配的,模型给不了自己想要的号', () => withStore(async (mk) => {
@@ -212,4 +217,66 @@ test('review:本来就是记录式,写一条进对话上下文并带上 callId',
   assert.equal(value.callId, 'call_test_1')
   assert.equal(appended.length, 1, '评审必须写一条进对话上下文')
   assert.equal(appended[0].source.callId, 'call_test_1', '消息要带上写它的那次调用')
+}))
+
+// ─────────────────────── 立项这道门 ───────────────────────
+
+// dashi 的 SKILL.md:"Treat `backlog` as not approved for execution. Unless the user
+// explicitly authorizes that issue, do not claim it, move it to another status, or
+// perform task work." 它靠 prompt 约束 agent;我们让工具直接拒绝,规矩变成机制。
+test('未立项的工作项:工具拒绝干活,返回带 error 的结果而不是抛异常', () => withStore(async (mk) => {
+  const id = mk('一个还没立项的想法', 'backlog')
+  const value = await draftTool().execute({ work: id, draft: '正文' }, exec)
+  assert.equal(value.error !== undefined, true, '未立项的条目不该能被 agent 动')
+  assert.match(value.error, /not approved|待立项/)
+  assert.equal(value.callId, 'call_test_1', '被拒也要回显 callId')
+}))
+
+test('四个内容工具都守这道门', () => withStore(async (mk) => {
+  const id = mk('未立项', 'backlog')
+  const calls = [
+    () => researchTool().execute({ work: id, query: 'q', sources: [] }, exec),
+    () => draftTool().execute({ work: id, draft: 'x' }, exec),
+    () => reviseTool().execute({ work: id, notes: 'n', revised: 'x' }, exec),
+    () => reviewTool().execute({ work: id, decision: 'reject', note: 'n' },
+      /** @type {any} */ ({ callId: 'c1', deferContext: () => {} })),
+  ]
+  for (const call of calls) {
+    const v = await call()
+    assert.equal(v.error !== undefined, true, '有工具没守立项这道门')
+  }
+}))
+
+test('取消掉的工作项也不许再动', () => withStore(async (mk) => {
+  const id = mk('取消的', 'canceled')
+  const v = await draftTool().execute({ work: id, draft: 'x' }, exec)
+  assert.match(v.error, /canceled|取消/)
+}))
+
+// ─────────────────────── 认领 ───────────────────────
+
+test('第一次干活会认领:等待认领 → 处理中,记成 agent', () => withStore(async (mk) => {
+  const id = mk('已立项', 'todo')
+  await draftTool().execute({ work: id, draft: '正文' }, exec)
+  const w = fold(readOps()).get(id)
+  assert.equal(w.status, 'in_progress', '干了活却还挂在等待认领')
+  const claimOp = readOps().find((o) => o.op === 'status' && o.to === 'in_progress')
+  assert.equal(claimOp.actor, 'agent', '认领是 agent 干的,要记在它头上')
+  assert.equal(claimOp.from, 'todo')
+}))
+
+test('已经在处理中的不重复认领 —— 日志里不该堆一串同样的流转', () => withStore(async (mk) => {
+  const id = mk('已立项', 'todo')
+  await draftTool().execute({ work: id, draft: 'a' }, exec)
+  await draftTool().execute({ work: id, draft: 'b' }, exec)
+  await reviseTool().execute({ work: id, notes: 'n', revised: 'c' }, exec)
+  const claims = readOps().filter((o) => o.op === 'status' && o.to === 'in_progress')
+  assert.equal(claims.length, 1, `认领了 ${claims.length} 次`)
+}))
+
+test('等你确认的工作项仍可继续干活,但不再改状态', () => withStore(async (mk) => {
+  const id = mk('待确认', 'in_review')
+  const v = await reviseTool().execute({ work: id, notes: 'n', revised: 'x' }, exec)
+  assert.equal(v.error, undefined, '打回重改不该被门挡住')
+  assert.equal(fold(readOps()).get(id).status, 'in_review', '认领只从等待认领起步,不该覆盖别的状态')
 }))
