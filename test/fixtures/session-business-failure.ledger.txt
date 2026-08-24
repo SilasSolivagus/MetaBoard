@@ -1,0 +1,51 @@
+14:metaboard-callcall_00_gzlT4gHWszgCq3I9oC569472
+metaboard_research  ·  done  ·  turn 1 / step 1
+{
+  "count": 3,
+  "sources": [
+    {
+      "title": "凌晨四点的城市属于谁",
+      "structure": [
+        "钩子",
+        "冲突",
+        "反转"
+      ]
+    },
+    {
+      "title": "我用夜跑治好了失眠",
+      "structure": [
+        "数据开场",
+        "案例",
+        "呼吁"
+      ]
+    },
+    {
+      "title": "夜跑装备到底要花多少钱",
+      "structure": [
+        "清单",
+        "价格锚点"
+      ]
+  
+…[截断]
+
+════
+
+14:metaboard-callcall_00_PDRGYYBLGI8HGwaREwP49210
+metaboard_draft  ·  done  ·  turn 1 / step 2
+derivedFrom: research(call_00_gzlT4gHWszgCq3I9oC569472)
+{
+  "charCount": 1200,
+  "draft": "业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试业务失败测试
+…[截断]
+
+════
+
+14:metaboard-callcall_00_ET_CqRfNYtQR37MdAw66EJw4786
+metaboard_revise  ·  failed  ·  turn 1 / step 3
+derivedFrom: draft(call_00_PDRGYYBLGI8HGwaREwP49210)
+{
+  "added": 0,
+  "removed": 0,
+  "callId": "call_00_ET_CqRfNYtQR37MdAw66EJw4786",
+  "error": "injected failure for reconciliation fixture"
+}
