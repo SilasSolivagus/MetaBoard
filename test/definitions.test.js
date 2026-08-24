@@ -123,7 +123,9 @@ function loadDefinitions() {
 
 test('client 半注册 metaboard-call 与 metaboard-review,并声明所需服务', () => {
   const { inject, call, review } = loadDefinitions()
-  assert.deepEqual(inject, ['slots', 'conversationEvents', 'conversationViews', 'sessions'])
+  // 快照走 props.useSession,ctx.sessions 在 client.js 里一次都没用到 ——
+  // 这里不再把它列进来,免得一个替死配置站岗的断言。
+  assert.deepEqual(inject, ['slots', 'conversationEvents', 'conversationViews'])
   assert.equal(call.target, 'metaboard')
   assert.equal(review.target, 'metaboard')
 })
@@ -672,7 +674,7 @@ const callRow = (data, refs = []) => ({
 const DONE_DRAFT = callRow({
   callId: 'd1', tool: 'metaboard_draft', turn: 2, step: 5, startedAt: 1, endedAt: 2,
   status: 'done', subject: 'topic:x', contentKind: 'draft', derivedFrom: [],
-  payload: { wordCount: 12 }, referenceOnly: false,
+  payload: { charCount: 12 }, referenceOnly: false,
 })
 
 test('行表:空快照渲染成空态而不是崩溃', () => {
@@ -687,7 +689,7 @@ test('行表:调用行显示工具名、status、turn 与 step(判据 3 的三�
   assert.match(row, /metaboard_draft/)
   assert.match(row, /done/)
   assert.match(row, /turn 2 \/ step 5/)
-  assert.match(row, /"wordCount": 12/)
+  assert.match(row, /"charCount": 12/)
 })
 
 test('行表:status 直接显示,不从 payload.error 重新推导', () => {
@@ -714,6 +716,38 @@ test('行表:referenceOnly 的行不显示 —— 一次评审只出一行', () 
   const rows = renderedRows({ rows: [reviewCall, reviewMsg], bySubject: {} })
   assert.equal(rows.length, 1)
   assert.match(rows[0], /人工评审 · 打回/)
+})
+
+// R20:抑制条件必须同时看 status。评审的可见行来自 execute 里 deferContext 写的
+// user/message —— 参数校验失败时 defineTool 在 execute 之前就抛了,那条消息根本
+// 不存在,调用行是这次失败在账本上唯一的痕迹。两个方向都要钉:失败的留下,成功的
+// 仍然被挡。只钉一个方向的话,一个从不过滤的渲染层也能让测试通过。
+test('行表:失败的评审调用行必须显示 —— 否则整次失败在账本上消失(R20)', () => {
+  const failedReviewCall = callRow({
+    callId: 'r9', tool: 'metaboard_review', turn: 4, step: 7, startedAt: 1, endedAt: 2,
+    status: 'failed', referenceOnly: true,
+  })
+  // 没有配套的 user/message:deferContext 从未执行过。
+  const rows = renderedRows({ rows: [failedReviewCall], bySubject: {} })
+  assert.equal(rows.length, 1, '失败的评审调用行被抑制了,这次失败在账本上等于没发生')
+  assert.match(rows[0], /metaboard_review\s+·\s+failed/)
+  assert.match(rows[0], /turn 4 \/ step 7/)
+  assert.match(rows[0], /没有信封/)
+})
+
+test('行表:在飞的评审调用行可见,完成后才被抑制(R20 的代价)', () => {
+  const running = callRow({
+    callId: 'r8', tool: 'metaboard_review', turn: 1, step: 1, startedAt: 1,
+    status: 'running', referenceOnly: true,
+  })
+  assert.equal(renderedRows({ rows: [running], bySubject: {} }).length, 1)
+
+  const done = callRow({
+    callId: 'r8', tool: 'metaboard_review', turn: 1, step: 1, startedAt: 1, endedAt: 2,
+    status: 'done', subject: 'topic:x', contentKind: 'review', derivedFrom: [],
+    payload: { decision: 'approve' }, referenceOnly: true,
+  })
+  assert.equal(renderedRows({ rows: [done], bySubject: {} }).length, 0)
 })
 
 test('行表:评审行取 text,不去读它根本没有的 payload', () => {
