@@ -37,7 +37,7 @@ test('同一毫秒:看板动作排在工作事件前面(呈现选择,已在注�
 })
 
 test('describe:认识的 kind 说具体的', () => {
-  assert.match(describe({ source: 'session', kind: 'research', payload: { count: 3, unverified: 1 } }), /3 条素材.*1 条未核实/)
+  assert.match(describe({ source: 'session', kind: 'research', payload: { count: 3, unverified: 1 } }), /素材 3 条.*1 条无出处/)
   assert.match(describe({ source: 'session', kind: 'draft', payload: { charCount: 842 } }), /842 字/)
   assert.match(describe({ source: 'session', kind: 'review', payload: { decision: 'reject', note: '开头太平' } }), /打回：开头太平/)
   assert.match(describe({ source: 'session', kind: 'revise', payload: { charCount: 650 } }), /改到 650 字/)

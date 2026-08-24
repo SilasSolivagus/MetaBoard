@@ -35,7 +35,7 @@ export function describe(e) {
     case 'research': {
       const n = p.count ?? (p.sources?.length ?? 0)
       const u = p.unverified
-      return u === undefined ? `记了 ${n} 条素材` : `记了 ${n} 条素材（${u} 条未核实）`
+      return u === undefined ? `素材 ${n} 条` : `素材 ${n} 条（${u} 条无出处）`
     }
     case 'draft': return `写了 ${p.charCount ?? p.draft?.length ?? '?'} 字`
     case 'review': return `${p.decision === 'reject' ? '打回' : '通过'}：${p.note ?? ''}`

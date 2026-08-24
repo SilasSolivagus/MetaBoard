@@ -69,8 +69,8 @@ test('work:分配 id 并写进 store,actor 记成 agent', () => withStore(async 
   const t = fold(readOps()).get('t1')
   assert.equal(t.title, '夜跑装备怎么选')
   assert.equal(t.actor, 'agent', '模型建的工作项要记成 agent —— 垃圾卡靠这个筛')
-  assert.equal(t.status, 'todo',
-    'agent 在对话里建项,说明人刚开口要了这件事;那句话就是授权,不该落在待立项')
+  assert.equal(t.status, 'backlog',
+    '记录一个需求不等于授权去做它 —— 否则 agent 新建一个自带通行证的条目就绕过了门')
 }))
 
 test('work:id 是分配的,模型给不了自己想要的号', () => withStore(async (mk) => {
@@ -155,12 +155,12 @@ test('research:空素材不是错误 —— 没搜到就是没搜到,不编', ()
   assert.equal(value.error, undefined)
 }))
 
-test('research:render 把未核实的条数告诉模型,不只报总数', () => {
+test('research:render 把无出处的条数告诉模型,不只报总数', () => {
   const tool = researchTool()
   const [block] = tool.output.render({ work: 't1', query: 'q', sources: SOURCES },
     { query: 'q', count: 2, unverified: 1, sources: SOURCES, callId: 'c1' })
   assert.match(block.text, /2 sources/)
-  assert.match(block.text, /1 unverified/, 'render 没有把未核实条数告诉模型')
+  assert.match(block.text, /1 without a source url/, 'render 没有把无出处的条数告诉模型')
 })
 
 test('research:缺必填参数在 execute 之前就抛(ToolArgsError 路径)', () => withStore(async (mk) => {
@@ -279,4 +279,14 @@ test('等你确认的工作项仍可继续干活,但不再改状态', () => with
   const v = await reviseTool().execute({ work: id, notes: 'n', revised: 'x' }, exec)
   assert.equal(v.error, undefined, '打回重改不该被门挡住')
   assert.equal(fold(readOps()).get(id).status, 'in_review', '认领只从等待认领起步,不该覆盖别的状态')
+}))
+
+test('agent 建的项立刻就被自己的门挡住 —— 记录不等于授权', () => withStore(async () => {
+  const created = await workTool().execute({ title: '顺带发现的一件事' }, exec)
+  assert.equal(created.error, undefined)
+  // 同一个 agent，下一秒就想在这上面干活。
+  const v = await draftTool().execute({ work: created.work, draft: '正文' }, exec)
+  assert.equal(v.error !== undefined, true,
+    'agent 新建一个条目就能自己给自己发通行证的话，这道门等于不存在')
+  assert.match(v.error, /not approved|待立项/)
 }))
