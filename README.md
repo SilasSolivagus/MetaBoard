@@ -19,10 +19,14 @@ MetaBoard brings the agent trajectory to non-coding work, starting with content 
 
 ## Status
 
-**Design complete. Implementation not started.**
+Phase 1 — the standalone dsh plugin form — is implemented and was verified against real
+sessions; [`docs/phase-1-acceptance.md`](docs/phase-1-acceptance.md) is the record. The current
+branch adds the CLI, projects, the comment stream, and conversation-bound claims on top of that,
+with the test suite green throughout.
 
-This repository currently contains no product code. What it does contain is a design grounded
-in verified constraints of the host system — see [What's already verified](#whats-already-verified).
+Two acceptance items are still open, both because they need a live dsh session to exercise: an
+end-to-end walk through the full loop, and two conversations racing to claim the same work item.
+The claim conflict has unit coverage — it has not yet been run against a real runtime.
 
 If you are looking for something to install today, come back later. If you are interested in
 how execution trajectories generalize beyond software, read on.
