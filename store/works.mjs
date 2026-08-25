@@ -300,6 +300,39 @@ export function allocateId(works) {
 }
 
 /**
+ * 建一个工作项:发号与写下 create 在同一把锁里跑完,返回分配到的 id。
+ *
+ * 分成两步(先 allocateId、再 appendOp)的写法在这里是错的,而且错得不响:两个进程
+ * 同时读到「最大号是 t0」会都挑 t1,日志里落两条 create,fold 只认第一条(重复的
+ * create 不覆盖已有工作项),后一个调用方拿着 t1 去写的却是别人的工作项 —— 它的工具
+ * 结果里那句「记为 t1:<自己的标题>」当场就是假的,而且这条假话会渲染进 dsh 的账本。
+ *
+ * 所以发号这件事不给调用方做:allocateId 只用来算号,建项一律走这里。
+ *
+ * @param {{ actor: string, title: string, status?: string, project?: string, ts?: string }} fields
+ * @param {string} [path]
+ * @returns {string} 分配到的 id
+ */
+export function createWork(fields, path = storePath()) {
+  return withLock(path, () => {
+    const ts = fields.ts ?? new Date().toISOString()
+    const work = allocateId(fold(readOps(path)))
+    /** @type {any[]} */
+    const ops = [{ ts, actor: fields.actor, work, op: 'create', title: fields.title, status: fields.status }]
+    // 项目归属跟 create 一起落地。分开写会有一瞬间的工作项没有归属,
+    // 而那一瞬间别人读到的它就是无归属的 —— 一样是账面与事实不符。
+    if (fields.project !== undefined) {
+      ops.push({ ts, actor: fields.actor, work, op: 'project', to: fields.project })
+    }
+    // 先全部 validate 再逐条写,和 appendChecked 一样是全有或全无:
+    // 归属那条不合法时,create 也不该已经落地。
+    for (const op of ops) validate(op)
+    for (const op of ops) appendOp(op, path)
+    return work
+  })
+}
+
+/**
  * 工作项当前的状态,给工具做准入判断用。四个内容工具共用这一个判据 ——
  * 各写一份就会漂移,这个项目已经被「两份实现各自演化」咬过三次。
  *

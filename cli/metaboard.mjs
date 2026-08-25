@@ -7,11 +7,11 @@
  * 「跨进程的数据路径」——外部程序读 dsh 的日志、写自己的选题表、把两条线并起来。
  * 那条路通不通,用 CLI 就能验完;先堆界面只会把风险推后。
  */
-import { readOps, fold, appendOp, appendChecked, allocateId, storePath, STATUSES, MAIN_STATUSES,
+import { readOps, fold, appendOp, appendChecked, createWork, storePath, STATUSES, MAIN_STATUSES,
   SECONDARY_STATUSES, STATUS_LABEL, opWork } from '../store/works.mjs'
 import { collectEvents, eventSummary, sessionRoot } from '../store/sessions.mjs'
 import { mergeTimeline, describe } from '../store/timeline.mjs'
-import { appendProjectOp, readProjectOps, foldProjects, allocateProjectId, projectsPath } from '../store/projects.mjs'
+import { appendProjectOp, readProjectOps, foldProjects, createProject, projectsPath } from '../store/projects.mjs'
 
 const now = () => new Date().toISOString()
 const hhmm = (/** @type {number} */ ms) => {
@@ -80,8 +80,9 @@ async function main(argv) {
       if (path !== undefined && !path.startsWith('/')) return fail('--path 要绝对路径')
       const name = args.join(' ').trim()
       if (name === '') return fail('要给项目一个名字：metaboard project new <名字>')
-      const id = allocateProjectId(projects)
-      appendProjectOp({ ts: now(), actor: 'user', project: id, op: 'create', name, path })
+      // 发号与写下 create 在 createProject 的锁里一起完成 —— 分开两步时两个进程
+      // 会都挑到同一个号,后一个的 create 被折叠丢掉,而它已经把这个号报给人了。
+      const id = createProject({ actor: 'user', name, path })
       console.log(`${id}  ${name}${path === undefined ? '' : `  ${path}`}`)
       return
     }
@@ -131,11 +132,11 @@ async function main(argv) {
     if (pid !== undefined && !foldProjects(readProjectOps()).has(pid)) return fail(`没有这个项目：${pid}`)
     const title = rest.join(' ').trim()
     if (title === '') return fail('要给工作项一个标题：metaboard new <标题>')
-    const id = allocateId(works)
     // 你在这里记下的是想法,不是任务 —— 落在待立项,agent 碰不到,
     // 直到你 approve。agent 在对话里建的项走另一条路,直接是等待认领。
-    appendOp({ ts: now(), actor: 'user', work: id, op: 'create', title, status: 'backlog' })
-    if (pid !== undefined) appendOp({ ts: now(), actor: 'user', work: id, op: 'project', to: pid })
+    // 发号与写下 create(以及归属)在 createWork 的锁里一起完成:CLI 与对话里的
+    // agent 是两个进程,分开两步就会抢到同一个号。
+    const id = createWork({ actor: 'user', title, status: 'backlog', project: pid })
     console.log(`${id}  ${title}\n待立项。想让 agent 做，先 metaboard approve ${id}`)
     return
   }

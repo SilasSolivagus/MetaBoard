@@ -11,10 +11,11 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { appendProjectOp, readProjectOps, foldProjects, allocateProjectId, projectForPath, projectsPath } from '../store/projects.mjs'
+import { appendProjectOp, readProjectOps, foldProjects, allocateProjectId, createProject,
+  projectForPath, projectsPath } from '../store/projects.mjs'
 import { appendOp, readOps, fold } from '../store/works.mjs'
 
 function tempStore() {
@@ -58,6 +59,36 @@ test('rename 与 archive 折叠得出来', () => {
     const p = foldProjects(readProjectOps()).get('p1')
     assert.equal(p.name, '新名')
     assert.equal(p.archivedAt, at(3))
+  } finally { s.cleanup() }
+})
+
+// 发号与写下 create 曾经是分开的两步。两个进程同时读到「最大号是 p0」就会都挑 p1:
+// 日志里落两条 create,foldProjects 只认第一条,后一个进程却把 p1 当成自己的项目
+// 报给了人。这条测试起两个真进程去抢号。
+test('两个进程同时建项目:号不重、谁的名字都没被顶掉', async () => {
+  const s = tempStore()
+  try {
+    const file = projectsPath()
+    const worker = `
+      import { createProject } from '${new URL('../store/projects.mjs', import.meta.url).href}'
+      const [file, tag] = process.argv.slice(2)
+      for (let i = 0; i < 20; i++) createProject({ actor: 'user', name: tag + i }, file)
+    `
+    const workerPath = join(s.dir, 'create-worker.mjs')
+    writeFileSync(workerPath, worker)
+    const { spawn } = await import('node:child_process')
+    const run = (/** @type {string} */ tag) => new Promise((resolve, reject) => {
+      const p = spawn(process.execPath, [workerPath, file, tag], { stdio: 'inherit' })
+      p.on('exit', (code) => code === 0 ? resolve(undefined) : reject(new Error(`worker ${tag} exited ${code}`)))
+    })
+    await Promise.all([run('A'), run('B')])
+
+    const creates = readProjectOps().filter((o) => o.op === 'create')
+    assert.equal(creates.length, 40)
+    assert.equal(new Set(creates.map((o) => o.project)).size, 40, '有两条 create 抢到了同一个号')
+    const projects = foldProjects(readProjectOps())
+    assert.equal(projects.size, 40)
+    assert.equal(new Set([...projects.values()].map((p) => p.name)).size, 40, '有项目的名字被顶掉了')
   } finally { s.cleanup() }
 })
 

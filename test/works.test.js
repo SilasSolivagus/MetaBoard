@@ -213,6 +213,40 @@ test('两个真进程并发追加 400 行,一行不丢、一行不坏', async ()
   } finally { s.cleanup() }
 })
 
+// 发号与写下 create 曾经是分开的两步(读日志挑号 → 追加),中间没有锁。
+// 两个进程同时读到「最大号是 t0」就会都挑 t1:日志里落两条 create,fold 丢掉后一条
+// (重复的 create 不覆盖),后一个调用方却拿着 t1 去写别人的工作项 —— 而它的工具结果
+// 已经把「记为 t1:<自己的标题>」渲染进账本了。账本上不能有这种话,所以两步必须
+// 在同一把锁里跑完。
+test('两个进程同时建项:号不重、谁的标题都没被顶掉', async () => {
+  const s = tempStore()
+  try {
+    const worker = `
+      import { createWork } from '${new URL('../store/works.mjs', import.meta.url).href}'
+      const [path, tag] = process.argv.slice(2)
+      for (let i = 0; i < 25; i++) createWork({ actor: 'user', title: tag + i }, path)
+    `
+    const workerPath = join(s.dir, 'create-worker.mjs')
+    writeFileSync(workerPath, worker)
+    const { spawn } = await import('node:child_process')
+    const run = (/** @type {string} */ tag) => new Promise((resolve, reject) => {
+      const p = spawn(process.execPath, [workerPath, s.path, tag], { stdio: 'inherit' })
+      p.on('exit', (code) => code === 0 ? resolve(undefined) : reject(new Error(`worker ${tag} exited ${code}`)))
+    })
+    await Promise.all([run('A'), run('B')])
+
+    const creates = readOps(s.path).filter((o) => o.op === 'create')
+    assert.equal(creates.length, 50)
+    assert.equal(new Set(creates.map((o) => o.work)).size, 50, '有两条 create 抢到了同一个号')
+    const works = fold(readOps(s.path))
+    assert.equal(works.size, 50)
+    // 折叠出来的标题必须正好是 50 个各不相同的标题。丢一个,就说明有人的标题
+    // 被顶掉了 —— 而那个人的工具结果里写的是自己的标题。
+    const titles = new Set([...works.values()].map((w) => w.title))
+    assert.equal(titles.size, 50, '有工作项的标题被别人的 create 顶掉了')
+  } finally { s.cleanup() }
+})
+
 // ─────────────────────── 看板/二级的划分 ───────────────────────
 
 test('看板只放已授权的流水线,待立项与完成收在别处', () => {

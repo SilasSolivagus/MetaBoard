@@ -14,6 +14,7 @@
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { metaboardHome, ACTORS } from './works.mjs'
+import { withLock } from './lock.mjs'
 
 export const PROJECT_OPS = /** @type {const} */ (['create', 'rename', 'archive'])
 
@@ -92,6 +93,26 @@ export function allocateProjectId(projects) {
     if (m !== null) max = Math.max(max, Number(m[1]))
   }
   return `p${max + 1}`
+}
+
+/**
+ * 建一个项目:发号与写下 create 在同一把锁里跑完,返回分配到的 id。
+ * 和 createWork 同一条理由 —— 分开两步时两个进程会都挑到 p1,
+ * 后一个的 create 被 foldProjects 丢掉,而它已经把 p1 报给人了。
+ *
+ * @param {{ actor: string, name: string, path?: string, ts?: string }} fields
+ * @param {string} [file]
+ * @returns {string} 分配到的 id
+ */
+export function createProject(fields, file = projectsPath()) {
+  return withLock(file, () => {
+    const id = allocateProjectId(foldProjects(readProjectOps(file)))
+    appendProjectOp({
+      ts: fields.ts ?? new Date().toISOString(),
+      actor: fields.actor, project: id, op: 'create', name: fields.name, path: fields.path,
+    }, file)
+    return id
+  })
 }
 
 /**
