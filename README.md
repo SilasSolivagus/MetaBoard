@@ -84,6 +84,46 @@ and it shaped the entire design. See below.
 
 ---
 
+## Commands and tools
+
+MetaBoard has two surfaces: a CLI a person runs directly, and a set of dsh tools an agent calls
+from inside a conversation. Both write to the same work-item log; either side can approve,
+comment on, or refile a work item the other created.
+
+### CLI
+
+| Command | What it does |
+|---|---|
+| `metaboard new <title> [--project <pid>]` | Record an idea. Lands in the backlog — not yet approved for an agent to touch. |
+| `metaboard approve <id>` | Approve: let an agent claim and start work. |
+| `metaboard ls [--project <pid>] [--all]` | The board — approved work only, grouped by status. `--all` adds backlog, done, and canceled. |
+| `metaboard show <id>` | The item's full timeline: board actions and dsh session events, merged into one line of history. |
+| `metaboard status <id> <status>` | Move an item to any status. |
+| `metaboard comment <id> <body>` | Leave a note — a requirement, a question, a clarification. |
+| `metaboard return <id> <reason>` | Send work back: `in_review` → `in_progress`, with the reason recorded as a comment. |
+| `metaboard rename <id> <title>` | Rename a work item. |
+| `metaboard archive <id>` | Archive. This hides the item from the board; it does not delete its history. |
+| `metaboard set-project <id> <pid\|->` | Assign a work item to a project, or `-` to clear the assignment. |
+| `metaboard project new <name> [--path <dir>]` | Create a project. `--path` lets `set-project`/`--project` match it by working directory later. |
+| `metaboard project ls` | List projects. |
+| `metaboard project rename <pid> <name>` | Rename a project. |
+| `metaboard project archive <pid>` | Archive a project. Items assigned to it are unaffected. |
+| `metaboard doctor` | Check that both data sources — the work-item log and the dsh session store — are reachable. |
+
+### dsh tools
+
+| Tool | What it does |
+|---|---|
+| `metaboard_work_create` | Record a new work item, optionally naming its project. Lands in the backlog — recording a requirement is not approval to act on it. |
+| `metaboard_research` | Record source material already gathered, verbatim. |
+| `metaboard_draft` | Record a draft already written, verbatim. |
+| `metaboard_revise` | Record a revision and the notes it was based on, verbatim. |
+| `metaboard_review` | Record a human review decision into the trajectory. |
+| `metaboard_work_read` | Read a work item's title, status, project, and comment stream. Reading needs no approval. |
+| `metaboard_report` | Write the agent's own account of what it did into the comment stream, and optionally hand the item back for review. |
+
+---
+
 ## What's already verified
 
 Before writing product code, the feasibility boundary was probed directly against the upstream

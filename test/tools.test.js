@@ -87,6 +87,24 @@ test('work:render 把 id 原样告诉模型,后续调用要照抄', () => withSt
   assert.match(block.text, /t7/)
 }))
 
+test('work_create 可以在建项时就归到项目', async () => {
+  await withStore(async () => {
+    const { appendProjectOp } = await import('../store/projects.mjs')
+    appendProjectOp({ ts: new Date().toISOString(), actor: 'user', project: 'p1', op: 'create', name: '云盘' })
+    const out = await workTool().execute({ title: '登录页报错', project: 'p1' }, exec)
+    assert.equal(out.error, undefined)
+    assert.equal(fold(readOps()).get(out.work).project, 'p1')
+    assert.equal(fold(readOps()).get(out.work).status, 'backlog', '归属不改变授权')
+  })
+})
+
+test('归到不存在的项目时如实报错,不默默丢掉归属', async () => {
+  await withStore(async () => {
+    const out = await workTool().execute({ title: '甲', project: 'p9' }, exec)
+    assert.match(out.error ?? '', /p9/)
+  })
+})
+
 // ─────────────────────────── 引用校验 ───────────────────────────
 
 test('引用不存在的工作项:返回带 error 的结果,不抛异常', () => withStore(async () => {

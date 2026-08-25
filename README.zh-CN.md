@@ -75,6 +75,45 @@ MetaBoard 是一个普通的、仓库外的 npm 包，两半：
 
 ---
 
+## 命令与工具
+
+MetaBoard 有两个入口：人直接用的命令行，和 agent 在会话里调的 dsh 工具。两边写的是同一份
+工作项日志——谁建的都能被另一边立项、留言、打回。
+
+### 命令行
+
+| 命令 | 作用 |
+|---|---|
+| `metaboard new <标题> [--project <pid>]` | 记一个想法，落在「待立项」——agent 碰不到，直到被批准。 |
+| `metaboard approve <id>` | 立项：允许 agent 认领并开始做。 |
+| `metaboard ls [--project <pid>] [--all]` | 看板：只显示已立项的流水线，按状态分组。`--all` 连待立项、完成、取消一起列。 |
+| `metaboard show <id>` | 这个工作项的完整时间线：看板动作与 dsh 会话事件并成一条线。 |
+| `metaboard status <id> <状态>` | 把工作项挪到任意状态。 |
+| `metaboard comment <id> <正文>` | 留一句话——要求、疑问、说明。 |
+| `metaboard return <id> <理由>` | 打回：等你确认 → 处理中，理由记进留言。 |
+| `metaboard rename <id> <新标题>` | 改标题。 |
+| `metaboard archive <id>` | 归档。归档只是从看板隐藏，历史仍在。 |
+| `metaboard set-project <id> <pid\|->` | 归属到某个项目，`-` 取消归属。 |
+| `metaboard project new <名字> [--path <绝对目录>]` | 建一个项目。给了 `--path`，之后 `set-project`/`--project` 可以按当前目录匹配到它。 |
+| `metaboard project ls` | 列出项目。 |
+| `metaboard project rename <pid> <新名字>` | 改项目名。 |
+| `metaboard project archive <pid>` | 归档项目。归属它的工作项不受影响。 |
+| `metaboard doctor` | 检查两边的数据源——工作项日志和 dsh 会话存储——读不读得到。 |
+
+### dsh 工具
+
+| 工具 | 作用 |
+|---|---|
+| `metaboard_work_create` | 记一个新工作项，可以在建项时就指定项目。落在待立项——记录一个需求不是授权去做它。 |
+| `metaboard_research` | 把已经检索到的素材逐字记下来。 |
+| `metaboard_draft` | 把已经写好的草稿逐字记下来。 |
+| `metaboard_revise` | 把改稿和依据的意见逐字记下来。 |
+| `metaboard_review` | 把一次人工评审的结论记进轨迹。 |
+| `metaboard_work_read` | 读一个工作项的标题、状态、项目归属和留言流。读不需要授权。 |
+| `metaboard_report` | 把 agent 自己做了什么写进同一条留言流，可以选择顺带把工作项交回去等待确认。 |
+
+---
+
 ## 已经验证过什么
 
 在写产品代码之前，先直接对着上游代码库把可行性边界探了一遍——测试写进真实的 JSONL 日志，
