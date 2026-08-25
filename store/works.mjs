@@ -88,7 +88,7 @@ const LEGACY_STATUS = { initial: 'backlog', researching: 'in_progress', drafting
  * updatedAt 对任何认得的 op 都会前进(乐观锁数的是「作用过几条 op」,不能被漏掉的分支骗过),
  * 没分支的 op 只是不改任何字段,看着变了、其实没变,一样是个坑。
  */
-export const OPS = /** @type {const} */ (['create', 'status', 'title', 'archive', 'comment'])
+export const OPS = /** @type {const} */ (['create', 'status', 'title', 'archive', 'comment', 'project'])
 
 export const ACTORS = /** @type {const} */ (['user', 'agent'])
 
@@ -174,6 +174,9 @@ function validate(op) {
         + 'requirements, a hand-back reason, or a summary of what you did — the text itself belongs '
         + 'in the dsh envelope.')
     }
+  }
+  if (op.op === 'project' && op.to !== null && (typeof op.to !== 'string' || op.to === '')) {
+    throw new Error('project op needs `to`: a project id, or null to unassign')
   }
 }
 
@@ -272,6 +275,7 @@ export function fold(ops) {
     } else if (op.op === 'title') t.title = op.to
     else if (op.op === 'archive') t.archivedAt = op.ts
     else if (op.op === 'comment') t.comments.push({ ts: op.ts, actor: op.actor, body: op.body, callId: op.callId })
+    else if (op.op === 'project') t.project = op.to ?? undefined
     t.updatedAt = op.ts
     t.version += 1
   }
