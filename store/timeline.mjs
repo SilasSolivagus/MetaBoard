@@ -42,6 +42,7 @@ export function describe(e) {
     case 'review': return `${p.decision === 'reject' ? '打回' : '通过'}：${p.note ?? ''}`
     case 'revise': return `改到 ${p.charCount ?? '?'} 字`
     case 'read': return `读了要求（${p.comments?.length ?? 0} 条留言）`
+    case 'report': return `自述：${String(p.body ?? '').slice(0, 40)}`
     default: return e.kind
   }
 }

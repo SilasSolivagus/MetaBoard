@@ -19,13 +19,14 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { appendOp, readOps, fold, workState } from '../store/works.mjs'
+import { appendOp, readOps, fold, workState, AGENT_FORBIDDEN } from '../store/works.mjs'
 import { workTool } from '../lib/tools/work.js'
 import { researchTool } from '../lib/tools/research.js'
 import { draftTool } from '../lib/tools/draft.js'
 import { reviseTool } from '../lib/tools/revise.js'
 import { reviewTool } from '../lib/tools/review.js'
 import { readTool } from '../lib/tools/read.js'
+import { reportTool } from '../lib/tools/report.js'
 
 const exec = /** @type {any} */ ({ callId: 'call_test_1', agent: { id: 'sess-test' } })
 
@@ -337,5 +338,64 @@ test('work_read 的渲染把留言正文带出来 —— 读不到正文等于�
     const value = await tool.execute({ work: id }, exec)
     const text = tool.output.render({ work: id }, value).map((/** @type {any} */ p) => p.text).join('\n')
     assert.match(text, /第三段没有出处/)
+  })
+})
+
+// ─────────────────────────── report ───────────────────────────
+
+test('report 写进同一条 comment 流,actor 是 agent', async () => {
+  await withStore(async (mk) => {
+    const id = mk()
+    appendOp({ ts: new Date().toISOString(), actor: 'user', work: id, op: 'status', from: 'backlog', to: 'todo' })
+    const out = await reportTool().execute({ work: id, body: '改了三处，没验' }, exec)
+    assert.equal(out.error, undefined)
+    const w = fold(readOps()).get(id)
+    assert.equal(w.comments.at(-1).body, '改了三处，没验')
+    assert.equal(w.comments.at(-1).actor, 'agent')
+    assert.equal(w.status, 'in_progress', '写自述也算干活，顺手认领')
+  })
+})
+
+test('handoff 把状态挪到等你确认', async () => {
+  await withStore(async (mk) => {
+    const id = mk()
+    appendOp({ ts: new Date().toISOString(), actor: 'user', work: id, op: 'status', from: 'backlog', to: 'todo' })
+    await reportTool().execute({ work: id, body: '开工' }, exec)
+    const out = await reportTool().execute({ work: id, body: '做完了', handoff: true }, exec)
+    assert.equal(out.error, undefined)
+    assert.equal(fold(readOps()).get(id).status, 'in_review')
+  })
+})
+
+test('agent 不能借 handoff 宣布完成 —— 只能到等你确认', async () => {
+  await withStore(async (mk) => {
+    const id = mk()
+    appendOp({ ts: new Date().toISOString(), actor: 'user', work: id, op: 'status', from: 'backlog', to: 'todo' })
+    await reportTool().execute({ work: id, body: '开工' }, exec)
+    await reportTool().execute({ work: id, body: '做完了', handoff: true }, exec)
+    assert.equal(fold(readOps()).get(id).status, 'in_review')
+    // 真正要验的是 agent 走不到 done —— 日志里不该有任何一条 agent 写的 done。
+    const agentDone = readOps().filter((o) => o.actor === 'agent' && o.op === 'status' && AGENT_FORBIDDEN.includes(o.to))
+    assert.equal(agentDone.length, 0)
+  })
+})
+
+test('待立项的工作项不能写自述 —— 门守的是写', async () => {
+  await withStore(async (mk) => {
+    // mk() 不传第二个参数时默认建 'todo'(已立项)——这个约定在文件开头的 withStore
+    // 注释里写明了:"传 'backlog' 就是未立项,用来验准入那道门"。这里就是那道门要验的
+    // 场景,所以显式传 'backlog'。
+    const id = mk('测试工作项', 'backlog')
+    const out = await reportTool().execute({ work: id, body: '我先干为敬' }, exec)
+    assert.match(out.error ?? '', /not approved/)
+  })
+})
+
+test('正文超过上限时说清楚为什么，而不是写进去', async () => {
+  await withStore(async (mk) => {
+    const id = mk()
+    appendOp({ ts: new Date().toISOString(), actor: 'user', work: id, op: 'status', from: 'backlog', to: 'todo' })
+    const out = await reportTool().execute({ work: id, body: '啊'.repeat(2000) }, exec)
+    assert.match(out.error ?? '', /limit/)
   })
 })
