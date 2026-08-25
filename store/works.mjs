@@ -83,7 +83,11 @@ export const AGENT_FORBIDDEN = /** @type {const} */ (['done'])
  */
 const LEGACY_STATUS = { initial: 'backlog', researching: 'in_progress', drafting: 'in_progress', revising: 'in_progress' }
 
-/** 操作词表。加新 op 必须同时加折叠分支 —— fold 见到不认识的 op 会跳过。 */
+/**
+ * 操作词表。加新 op 必须同时加折叠分支 —— 没分支不等于被 fold 悄悄吞掉:version 与
+ * updatedAt 对任何认得的 op 都会前进(乐观锁数的是「作用过几条 op」,不能被漏掉的分支骗过),
+ * 没分支的 op 只是不改任何字段,看着变了、其实没变,一样是个坑。
+ */
 export const OPS = /** @type {const} */ (['create', 'status', 'title', 'archive', 'comment'])
 
 export const ACTORS = /** @type {const} */ (['user', 'agent'])
