@@ -108,11 +108,11 @@ comment on, or refile a work item the other created.
 | `metaboard rename <id> <title>` | Rename a work item. |
 | `metaboard archive <id>` | Archive. This hides the item from the board; it does not delete its history. |
 | `metaboard set-project <id> <pid\|->` | Assign a work item to a project, or `-` to clear the assignment. |
-| `metaboard project new <name> [--path <dir>]` | Create a project. `--path` lets `set-project`/`--project` match it by working directory later. |
+| `metaboard project new <name> [--path <dir>]` | Create a project. `--path` stores an absolute directory on the project record — nothing on this branch resolves a working directory back to a project from it yet. |
 | `metaboard project ls` | List projects. |
 | `metaboard project rename <pid> <name>` | Rename a project. |
 | `metaboard project archive <pid>` | Archive a project. Items assigned to it are unaffected. |
-| `metaboard doctor` | Check that both data sources — the work-item log and the dsh session store — are reachable. |
+| `metaboard doctor` | Check that the work-item log, the project log, and the dsh session store are all reachable. |
 
 ### dsh tools
 

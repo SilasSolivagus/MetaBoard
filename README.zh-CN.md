@@ -96,11 +96,11 @@ MetaBoard 有两个入口：人直接用的命令行，和 agent 在会话里调
 | `metaboard rename <id> <新标题>` | 改标题。 |
 | `metaboard archive <id>` | 归档。归档只是从看板隐藏，历史仍在。 |
 | `metaboard set-project <id> <pid\|->` | 归属到某个项目，`-` 取消归属。 |
-| `metaboard project new <名字> [--path <绝对目录>]` | 建一个项目。给了 `--path`，之后 `set-project`/`--project` 可以按当前目录匹配到它。 |
+| `metaboard project new <名字> [--path <绝对目录>]` | 建一个项目。`--path` 把一个绝对目录存进项目记录——目前没有任何地方会反过来用它，把当前目录解析回项目。 |
 | `metaboard project ls` | 列出项目。 |
 | `metaboard project rename <pid> <新名字>` | 改项目名。 |
 | `metaboard project archive <pid>` | 归档项目。归属它的工作项不受影响。 |
-| `metaboard doctor` | 检查两边的数据源——工作项日志和 dsh 会话存储——读不读得到。 |
+| `metaboard doctor` | 检查工作项日志、项目日志、dsh 会话存储三边读不读得到。 |
 
 ### dsh 工具
 
