@@ -116,6 +116,24 @@ export function createProject(fields, file = projectsPath()) {
 }
 
 /**
+ * 带存在性前置条件的追加。检查与写在同一把锁里 —— 分成两步时中间可以插进别的
+ * 进程的写入,于是「我刚查过它存在」到写下去的那一刻可能已经不成立。
+ *
+ * 这里只守存在性,没有工作项表那样的 ifVersion:项目的 rename 与 archive 都不
+ * 声称自己是从哪个状态来的,没有可以变假的断言要守。
+ *
+ * @param {any} op @param {string} [file]
+ */
+export function appendProjectChecked(op, file = projectsPath()) {
+  return withLock(file, () => {
+    if (!foldProjects(readProjectOps(file)).has(op.project)) {
+      throw new Error(`unknown project: ${op.project}`)
+    }
+    return appendProjectOp(op, file)
+  })
+}
+
+/**
  * 当前目录属于哪个项目。规则照抄 dashi:
  * 「Treat its project as a workspace match only when `project.workspacePath` is
  *  the current directory or one of its ancestors.」

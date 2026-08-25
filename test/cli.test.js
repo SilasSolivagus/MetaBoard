@@ -9,7 +9,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -116,5 +116,57 @@ test('不在等你确认的工作项打不回', () => {
     s.run(['new', '活儿'])
     s.run(['approve', 't1'])
     assert.throws(() => s.run(['return', 't1', '理由']), /等你确认/)
+  } finally { s.cleanup() }
+})
+
+// ─────────────────────── 写命令都得走锁 ───────────────────────
+
+// 只有 return 走过 appendChecked,其余的写命令直接 appendOp,不上锁:
+// 「读出状态 → 判断 → 追加」这三步中间可以插进 agent 的写入。真实的失败长这样:
+// agent 的 handoff 已经折叠完、看到 in_progress,还没写下去;人这时敲了
+// metaboard status t1 blocked;handoff 随后写下 from: 'in_progress' —— 一句
+// 写下去时就已经不成立的断言,而人的 blocked 被顶掉了。
+//
+// 探针用陈旧锁:withLock 抢锁时会把超过 STALE_MS 的锁文件删掉再重抢,所以
+// 「命令跑完之后这个锁文件不见了」等价于「这条写路径真的进过锁」。
+// 不上锁的 appendOp 会绕开它,锁文件原封不动地留在那里。
+/** @param {string} target 被保护的日志文件 */
+function plantStaleLock(target) {
+  const lockPath = `${target}.lock`
+  writeFileSync(lockPath, '99999 陈旧的锁\n')
+  const longAgo = new Date(Date.now() - 60_000)
+  utimesSync(lockPath, longAgo, longAgo)
+  return lockPath
+}
+
+test('每条写命令都经过锁,不是直接追加', () => {
+  const s = box()
+  try {
+    const works = join(s.dir, 'works.jsonl')
+    const projects = join(s.dir, 'projects.jsonl')
+    /** @type {[string[], string][]} */
+    const cases = [
+      [['new', '活儿'], works],
+      [['approve', 't1'], works],
+      [['status', 't1', 'in_review'], works],
+      [['return', 't1', '第三段没有出处'], works],
+      [['comment', 't1', '再核一遍出处'], works],
+      [['rename', 't1', '改过的标题'], works],
+      [['project', 'new', '甲项目'], projects],
+      [['set-project', 't1', 'p1'], works],
+      [['project', 'rename', 'p1', '乙项目'], projects],
+      [['project', 'archive', 'p1'], projects],
+      [['archive', 't1'], works],
+    ]
+    for (const [args, target] of cases) {
+      const lockPath = plantStaleLock(target)
+      s.run(args)
+      assert.equal(existsSync(lockPath), false, `metaboard ${args.join(' ')} 没走锁,直接写了日志`)
+    }
+    // 命令确实都生效了 —— 否则上面这串断言在「什么都没写」时也会通过。
+    const out = s.run(['show', 't1'])
+    assert.match(out, /改过的标题/)
+    assert.match(out, /第三段没有出处/)
+    assert.match(out, /再核一遍出处/)
   } finally { s.cleanup() }
 })

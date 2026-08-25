@@ -7,11 +7,11 @@
  * 「跨进程的数据路径」——外部程序读 dsh 的日志、写自己的选题表、把两条线并起来。
  * 那条路通不通,用 CLI 就能验完;先堆界面只会把风险推后。
  */
-import { readOps, fold, appendOp, appendChecked, createWork, storePath, STATUSES, MAIN_STATUSES,
+import { readOps, fold, appendChecked, createWork, storePath, STATUSES, MAIN_STATUSES,
   SECONDARY_STATUSES, STATUS_LABEL, opWork } from '../store/works.mjs'
 import { collectEvents, eventSummary, sessionRoot } from '../store/sessions.mjs'
 import { mergeTimeline, describe } from '../store/timeline.mjs'
-import { appendProjectOp, readProjectOps, foldProjects, createProject, projectsPath } from '../store/projects.mjs'
+import { appendProjectChecked, readProjectOps, foldProjects, createProject, projectsPath } from '../store/projects.mjs'
 
 const now = () => new Date().toISOString()
 const hhmm = (/** @type {number} */ ms) => {
@@ -97,14 +97,14 @@ async function main(argv) {
       if (pid === undefined || !projects.has(pid)) return fail(`没有这个项目：${pid ?? '(未指定)'}`)
       const to = words.join(' ').trim()
       if (to === '') return fail('要给新名字：metaboard project rename <pid> <新名字>')
-      appendProjectOp({ ts: now(), actor: 'user', project: pid, op: 'rename', to })
+      appendProjectChecked({ ts: now(), actor: 'user', project: pid, op: 'rename', to })
       console.log(`${pid}  ${to}`)
       return
     }
     if (sub === 'archive') {
       const pid = args[0]
       if (pid === undefined || !projects.has(pid)) return fail(`没有这个项目：${pid ?? '(未指定)'}`)
-      appendProjectOp({ ts: now(), actor: 'user', project: pid, op: 'archive' })
+      appendProjectChecked({ ts: now(), actor: 'user', project: pid, op: 'archive' })
       console.log(`${pid} 已归档。归属它的工作项不动，只是不再参与目录匹配。`)
       return
     }
@@ -117,12 +117,14 @@ async function main(argv) {
     if (t === undefined) return fail(`没有这个工作项：${id ?? '(未指定)'}`)
     if (pid === undefined) return fail('要指定项目：metaboard set-project <id> <pid|->')
     if (pid === '-') {
-      appendOp({ ts: now(), actor: 'user', work: id, op: 'project', to: null })
+      appendChecked({ ts: now(), actor: 'user', work: id, op: 'project', to: null })
       console.log(`${id} 已取消项目归属。`)
       return
     }
+    // 项目那本日志只追加、没有删除,所以「刚查到的项目」不会在写下去之前消失 ——
+    // 这一条跨两本日志的检查不需要放进同一把锁里。
     if (!foldProjects(readProjectOps()).has(pid)) return fail(`没有这个项目：${pid}`)
-    appendOp({ ts: now(), actor: 'user', work: id, op: 'project', to: pid })
+    appendChecked({ ts: now(), actor: 'user', work: id, op: 'project', to: pid })
     console.log(`${id} 归到 ${pid}。`)
     return
   }
@@ -209,7 +211,10 @@ async function main(argv) {
     const t = id === undefined ? undefined : works.get(id)
     if (t === undefined) return fail(`没有这个工作项：${id ?? '(未指定)'}`)
     if (t.status !== 'backlog') return fail(`${id} 已经立过项了（现在是${STATUS_LABEL[t.status]}）`)
-    appendOp({ ts: now(), actor: 'user', work: id, op: 'status', from: 'backlog', to: 'todo' })
+    // ifVersion 把「刚才读到它是待立项」和这次写变成一次操作。少了它,中间有别人
+    // 挪过状态时,这行 from: 'backlog' 在写下去的一刻就已经是假的了。
+    appendChecked({ ts: now(), actor: 'user', work: id, op: 'status', from: 'backlog', to: 'todo' },
+      { ifVersion: t.version })
     console.log(`${id} 已立项，agent 可以来接了。`)
     return
   }
@@ -221,7 +226,10 @@ async function main(argv) {
     if (!STATUSES.includes(/** @type {any} */ (to))) {
       return fail(`状态只能是：${STATUSES.map((x) => `${x}(${STATUS_LABEL[x]})`).join(' / ')}`)
     }
-    appendOp({ ts: now(), actor: 'user', work: id, op: 'status', from: t.status, to })
+    // 同 approve:from 写的是刚读到的状态,这是一句关于过去的断言,
+    // 所以读与写必须是一次操作。
+    appendChecked({ ts: now(), actor: 'user', work: id, op: 'status', from: t.status, to },
+      { ifVersion: t.version })
     console.log(`${id}  ${STATUS_LABEL[t.status]} → ${STATUS_LABEL[to]}`)
     return
   }
@@ -232,7 +240,9 @@ async function main(argv) {
     if (t === undefined) return fail(`没有这个工作项：${id ?? '(未指定)'}`)
     const body = words.join(' ').trim()
     if (body === '') return fail('要写点什么：metaboard comment <id> <正文>')
-    appendOp({ ts: now(), actor: 'user', work: id, op: 'comment', body })
+    // 不带 ifVersion:留言不声称工作项处在什么状态,别人同时留了一句话不该让
+    // 这句写不进去。要守的只是「工作项存在」,而这条 appendChecked 在锁里重查一遍。
+    appendChecked({ ts: now(), actor: 'user', work: id, op: 'comment', body })
     console.log(`${id} 已留言。agent 下次读这个工作项时会看到。`)
     return
   }
@@ -259,7 +269,7 @@ async function main(argv) {
     if (t === undefined) return fail(`没有这个工作项：${id ?? '(未指定)'}`)
     const to = words.join(' ').trim()
     if (to === '') return fail('要给新标题：metaboard rename <id> <新标题>')
-    appendOp({ ts: now(), actor: 'user', work: id, op: 'title', to })
+    appendChecked({ ts: now(), actor: 'user', work: id, op: 'title', to })
     console.log(`${id}  ${to}`)
     return
   }
@@ -268,7 +278,7 @@ async function main(argv) {
     const id = rest[0]
     const t = id === undefined ? undefined : works.get(id)
     if (t === undefined) return fail(`没有这个工作项：${id ?? '(未指定)'}`)
-    appendOp({ ts: now(), actor: 'user', work: id, op: 'archive' })
+    appendChecked({ ts: now(), actor: 'user', work: id, op: 'archive' })
     console.log(`${id} 已归档。事件仍在，show 照常看得到。`)
     return
   }
