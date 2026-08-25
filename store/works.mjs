@@ -153,6 +153,15 @@ function validate(op) {
     if (op.from !== undefined && !STATUSES.includes(op.from)) {
       throw new Error(`unknown status: ${JSON.stringify(op.from)}`)
     }
+    // AGENT_FORBIDDEN 原先只是个带注释的常量,没有一处代码查过它 —— 于是
+    // {actor:'agent', op:'status', to:'done'} 一直是写得进去的,规矩全靠没人走那条路。
+    // 检查放在这里:validate 已经在管 agent 特有的规矩(下面那条绑定就是),
+    // 而这里是唯一一个所有写入都必经的点。
+    if (op.actor === 'agent' && AGENT_FORBIDDEN.includes(op.to)) {
+      throw new Error(
+        `an agent may not move a work item to ${op.to} — only the person accepts work as done. `
+        + 'Hand it back with in_review instead.')
+    }
     // 绑定只对 agent 强制。人不是会话,人挪状态不需要出示身份 —— 而且人挪进
     // in_progress 会顺带清掉绑定,这就是 R28 说的「人可以夺权」。
     if (op.actor === 'agent' && op.to === 'in_progress' && op.binding === undefined) {

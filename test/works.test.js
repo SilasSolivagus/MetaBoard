@@ -267,6 +267,21 @@ test('agent 不能宣布完成', () => {
   assert.deepEqual([...AGENT_FORBIDDEN], ['done'])
   assert.equal(AGENT_FORBIDDEN.includes('blocked'), false, 'agent 该能说自己卡住了')
   assert.equal(AGENT_FORBIDDEN.includes('canceled'), false, 'agent 该能说这事不做了')
+
+  // 上面三条只是在读一个常量。这条规则真正要拦的是写入 —— 没有下面这段的时候,
+  // AGENT_FORBIDDEN 谁也没查过,{actor:'agent', to:'done'} 照写不误,
+  // 而那一行会让账本说「这件事 agent 做完了」,人从没点过头。
+  const s = tempStore()
+  try {
+    appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: '甲', status: 'in_review' }, s.path)
+    assert.throws(
+      () => appendOp({ ts: at(2), actor: 'agent', work: 't1', op: 'status', from: 'in_review', to: 'done' }, s.path),
+      /done/)
+    assert.equal(readOps(s.path).length, 1, '不合法的行不能落地')
+    // 守的是 agent,不是状态本身:人照样可以验收。
+    appendOp({ ts: at(3), actor: 'user', work: 't1', op: 'status', from: 'in_review', to: 'done' }, s.path)
+    assert.equal(fold(readOps(s.path)).get('t1').status, 'done')
+  } finally { s.cleanup() }
 })
 
 test('workState:未立项与取消都拒绝,其余放行并带回当前状态', () => {

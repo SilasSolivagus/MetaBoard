@@ -105,7 +105,9 @@ async function main(argv) {
       const pid = args[0]
       if (pid === undefined || !projects.has(pid)) return fail(`没有这个项目：${pid ?? '(未指定)'}`)
       appendProjectChecked({ ts: now(), actor: 'user', project: pid, op: 'archive' })
-      console.log(`${pid} 已归档。归属它的工作项不动，只是不再参与目录匹配。`)
+      // 不说「不再参与目录匹配」——没有任何地方拿目录去反查项目(projectForPath
+      // 至今没有生产调用方)。归档实际改变的只有 project ls 列不列它。
+      console.log(`${pid} 已归档。归属它的工作项不动，只是不再出现在 project ls 里。`)
       return
     }
     return fail(`不认识的 project 子命令：${sub ?? '(未指定)'}`)
