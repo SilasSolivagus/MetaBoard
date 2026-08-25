@@ -41,7 +41,8 @@ test('describe:认识的 kind 说具体的', () => {
   assert.match(describe({ source: 'session', kind: 'draft', payload: { charCount: 842 } }), /842 字/)
   assert.match(describe({ source: 'session', kind: 'review', payload: { decision: 'reject', note: '开头太平' } }), /打回：开头太平/)
   assert.match(describe({ source: 'session', kind: 'revise', payload: { charCount: 650 } }), /改到 650 字/)
-  assert.match(describe({ source: 'board', op: 'status', from: 'backlog', to: 'in_progress' }), /backlog → in_progress/)
+  // 这条原先断言的是英文枚举原值 —— 它把缺陷写死了。看板动作和 ls 一样印中文标签。
+  assert.match(describe({ source: 'board', op: 'status', from: 'backlog', to: 'in_progress' }), /待立项 → 处理中/)
   assert.match(describe({ source: 'board', op: 'archive' }), /归档/)
 })
 
@@ -102,4 +103,18 @@ test('callId 对不上的信封条目不被吃掉 —— 写失败的自述要�
     { at: Date.parse('2026-08-24T10:06:00.000Z'), kind: 'report', callId: 'call_10', payload: { error: '写不进去', callId: 'call_10' } },
   ]
   assert.equal(mergeTimeline(ops, events).filter((e) => e.source === 'session').length, 1)
+})
+
+test('状态变更用中文标签,和 ls 一套说法', () => {
+  assert.equal(describe({ source: 'board', op: 'status', from: 'todo', to: 'in_progress' }),
+    '状态 等待认领 → 处理中')
+})
+
+test('早期状态值在显示时也要映射 —— 真实日志里有 initial', () => {
+  // fold 把 LEGACY_STATUS 作用在 op.to 上,describe 原先完全不知道它,
+  // 于是 `metaboard show` 在真实历史日志上打出「状态 initial → in_review」:
+  // 一个用户从没见过的英文枚举值。夹具全用当前值,所以测试套件抓不到,
+  // 是界面接上真实的 ~/.metaboard/works.jsonl 之后才露出来的。
+  assert.equal(describe({ source: 'board', op: 'status', from: 'initial', to: 'in_review' }),
+    '状态 待立项 → 等你确认')
 })

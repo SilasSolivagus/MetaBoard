@@ -6,3 +6,8 @@ node_modules/
 *.log
 
 .superpowers/
+
+# 生成的看板页面
+web/index.html
+# 工单流渲染的样本数据，没有代码读它，只在做工单界面时当夹具
+web/data.sample.json

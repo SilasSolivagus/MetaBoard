@@ -81,7 +81,7 @@ export const AGENT_FORBIDDEN = /** @type {const} */ (['done'])
  * 不在 validate 里放行这些值:新的写入必须用现行枚举。
  * @type {Record<string, string>}
  */
-const LEGACY_STATUS = { initial: 'backlog', researching: 'in_progress', drafting: 'in_progress', revising: 'in_progress' }
+export const LEGACY_STATUS = { initial: 'backlog', researching: 'in_progress', drafting: 'in_progress', revising: 'in_progress' }
 
 /**
  * 操作词表。加新 op 必须同时加折叠分支 —— 没分支不等于被 fold 悄悄吞掉:version 与

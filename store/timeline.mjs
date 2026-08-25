@@ -10,6 +10,29 @@
  * 形态就是为了这一刻),dsh 的会话本来就是事件流。剩下的只是按时间戳排序。
  */
 
+import { STATUS_LABEL, LEGACY_STATUS } from './works.mjs'
+
+/**
+ * 状态值 → 中文标签。
+ *
+ * 两件事在这里一起做,因为它们是同一个毛病的两半:
+ *
+ * 1. 用 STATUS_LABEL —— `ls` 一直印中文,而 `show` 原先印英文枚举值,同一个 CLI 两套说法。
+ * 2. 过一遍 LEGACY_STATUS —— fold 把早期状态值映射掉了,但只作用在 op.to 上;
+ *    describe 完全不知道它。于是 `metaboard show` 在真实历史日志上打出
+ *    「状态 initial → in_review」,一个用户从没见过的词。
+ *
+ * 这条是界面接上真实的 ~/.metaboard/works.jsonl 之后才露出来的:测试夹具用的
+ * 全是当前状态值,只有真实日志里才留着 initial。
+ *
+ * @param {string|undefined} s
+ */
+function statusLabel(s) {
+  if (s === undefined) return '?'
+  const now = LEGACY_STATUS[s] ?? s
+  return STATUS_LABEL[now] ?? now
+}
+
 /**
  * 一条时间线条目的人话摘要。payload 的形状按 kind 不同,认识的就说具体的,
  * 不认识的就只报 kind —— 宁可少说,不能瞎说。
@@ -23,7 +46,7 @@ export function describe(e) {
       // 认领落在一条 from 与 to 相同、带着绑定的状态操作上(store/works.mjs 的 claim)。
       // 照直印成「状态 in_progress → in_progress」等于一行没说话。
       if (e.binding !== undefined && e.from === e.to) return `认领：会话 ${e.binding.session}`
-      return `状态 ${e.from ?? '?'} → ${e.to}`
+      return `状态 ${statusLabel(e.from)} → ${statusLabel(e.to)}`
     }
     if (e.op === 'title') return `改名为：${e.to}`
     if (e.op === 'comment') return `${e.actor === 'agent' ? 'agent' : '你'}留言：${e.body}`
