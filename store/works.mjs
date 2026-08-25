@@ -153,6 +153,17 @@ function validate(op) {
     if (op.from !== undefined && !STATUSES.includes(op.from)) {
       throw new Error(`unknown status: ${JSON.stringify(op.from)}`)
     }
+    // 绑定只对 agent 强制。人不是会话,人挪状态不需要出示身份 —— 而且人挪进
+    // in_progress 会顺带清掉绑定,这就是 R28 说的「人可以夺权」。
+    if (op.actor === 'agent' && op.to === 'in_progress' && op.binding === undefined) {
+      throw new Error('an agent moving a work item to in_progress must carry a binding')
+    }
+    if (op.binding !== undefined) {
+      const b = op.binding
+      if (typeof b?.session !== 'string' || b.session === '' || typeof b.workspace !== 'string' || b.workspace === '') {
+        throw new Error('binding needs non-empty session and workspace')
+      }
+    }
   }
   if (op.op === 'comment') {
     if (typeof op.body !== 'string' || op.body.trim() === '') throw new Error('comment needs a non-empty body')
@@ -288,34 +299,45 @@ export function allocateId(works) {
  * 工作项当前的状态,给工具做准入判断用。四个内容工具共用这一个判据 ——
  * 各写一份就会漂移,这个项目已经被「两份实现各自演化」咬过三次。
  *
- * 归档过的工作项仍然算存在:归档是看板可见性,不是删除。已经开工的内容还要能继续记录。
+ * 归档过的工作项仍然算存在:归档是看板可见性,不是删除。
+ *
+ * 第二个参数从 path 变成了选项对象,因为准入判断多了一条:别的会话认领着的工作项
+ * 不许碰。这条本可以单开一个函数,但那正是「两份判据各自演化」的起点。
  *
  * @param {string} id
- * @param {string} [path]
- * @returns {{ ok: true, status: string } | { ok: false, reason: string }}
+ * @param {{ path?: string, session?: string }} [opts]
+ * @returns {{ ok: true, status: string, version: number } | { ok: false, reason: string }}
  */
-export function workState(id, path) {
-  const w = fold(readOps(path)).get(id)
+export function workState(id, opts = {}) {
+  const w = fold(readOps(opts.path)).get(id)
   if (w === undefined) return { ok: false, reason: `unknown work item: ${id}` }
   if (w.status === 'backlog') {
-    // 立项这条线在这里长出牙齿。dashi 靠 prompt 约束 agent 不许碰未立项的条目;
-    // 我们直接拒绝 —— 规矩变成机制,agent 想违反也做不到。
     return { ok: false, reason: `${id} is not approved for execution (待立项). Ask the person to approve it first; do not start work on it.` }
   }
   if (w.status === 'canceled') return { ok: false, reason: `${id} was canceled (取消)` }
-  return { ok: true, status: w.status }
+  if (w.binding !== undefined && w.binding.session !== opts.session) {
+    return { ok: false, reason: `${id} is claimed by another conversation (${w.binding.session}). Never take over another agent's claim — report it instead.` }
+  }
+  return { ok: true, status: w.status, version: w.version }
 }
 
 /**
- * 认领:把 todo 挪成 in_progress。内容工具第一次在这个工作项上干活时调用 ——
- * 这就是 dashi 里 agent 显式 claim 的等价动作,只是由工具替它做,不靠它记得。
+ * 认领:把 todo 挪成 in_progress,并记下是哪个会话在做。
+ *
+ * 照 dashi 的 threadBinding。它要求五段身份齐全才允许认领,少一段就停下 ——
+ * 「never create a legacy binding containing only threadId」。半个绑定比没有绑定
+ * 更坏,因为它看起来像有保护。我们的两段是会话与工作区,同样是齐了才写。
+ *
  * @param {string} id
  * @param {string} from
+ * @param {{ session: string, workspace: string }} binding
  * @param {string} [path]
  */
-export function claim(id, from, path) {
+export function claim(id, from, binding, path) {
   if (from !== 'todo') return
-  appendOp({ ts: new Date().toISOString(), actor: 'agent', work: id, op: 'status', from, to: 'in_progress' }, path)
+  appendChecked(
+    { ts: new Date().toISOString(), actor: 'agent', work: id, op: 'status', from, to: 'in_progress', binding },
+    { binding }, path)
 }
 
 /**

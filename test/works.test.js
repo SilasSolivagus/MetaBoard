@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   STATUSES, MAIN_STATUSES, SECONDARY_STATUSES, STATUS_LABEL, AGENT_FORBIDDEN,
-  MAX_LINE_BYTES, storePath, appendOp, readOps, fold, allocateId, workState,
+  MAX_LINE_BYTES, storePath, appendOp, readOps, fold, allocateId, workState, claim,
   appendChecked, ConflictError,
 } from '../store/works.mjs'
 
@@ -62,7 +62,8 @@ test('折叠取最后一次变更 —— 存的是变更,不是当前值', () =>
   const s = tempStore()
   try {
     appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: '初名' }, s.path)
-    appendOp({ ts: at(2), actor: 'agent', work: 't1', op: 'status', from: 'backlog', to: 'in_progress' }, s.path)
+    appendOp({ ts: at(2), actor: 'agent', work: 't1', op: 'status', from: 'backlog', to: 'in_progress',
+      binding: { session: 'sess-A', workspace: '/tmp/w' } }, s.path)
     appendOp({ ts: at(3), actor: 'user', work: 't1', op: 'title', to: '改过的名' }, s.path)
     appendOp({ ts: at(4), actor: 'user', work: 't1', op: 'status', from: 'in_progress', to: 'in_review' }, s.path)
     const t = fold(readOps(s.path)).get('t1')
@@ -240,11 +241,50 @@ test('workState:未立项与取消都拒绝,其余放行并带回当前状态', 
     const mk = (/** @type {string} */ id, /** @type {string} */ status) =>
       appendOp({ ts: at(1), actor: 'user', work: id, op: 'create', title: id, status }, s.path)
     mk('a', 'backlog'); mk('b', 'todo'); mk('c', 'canceled'); mk('d', 'in_review')
-    assert.equal(workState('a', s.path).ok, false)
-    assert.equal(workState('c', s.path).ok, false)
-    assert.deepEqual(workState('b', s.path), { ok: true, status: 'todo' })
-    assert.deepEqual(workState('d', s.path), { ok: true, status: 'in_review' })
-    assert.equal(workState('nope', s.path).ok, false)
+    assert.equal(workState('a', { path: s.path }).ok, false)
+    assert.equal(workState('c', { path: s.path }).ok, false)
+    assert.deepEqual(workState('b', { path: s.path }), { ok: true, status: 'todo', version: 1 })
+    assert.deepEqual(workState('d', { path: s.path }), { ok: true, status: 'in_review', version: 1 })
+    assert.equal(workState('nope', { path: s.path }).ok, false)
+  } finally { s.cleanup() }
+})
+
+test('别的会话认领着的工作项,workState 拒绝', () => {
+  const s = tempStore()
+  try {
+    appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: '甲' }, s.path)
+    appendOp({ ts: at(2), actor: 'user', work: 't1', op: 'status', from: 'backlog', to: 'todo' }, s.path)
+    appendOp({ ts: at(3), actor: 'agent', work: 't1', op: 'status', from: 'todo', to: 'in_progress',
+      binding: { session: 'sess-A', workspace: '/tmp/w' } }, s.path)
+    const mine = workState('t1', { path: s.path, session: 'sess-B' })
+    assert.equal(mine.ok, false)
+    assert.match(mine.reason, /another conversation/)
+    assert.equal(workState('t1', { path: s.path, session: 'sess-A' }).ok, true)
+  } finally { s.cleanup() }
+})
+
+test('人挪进 in_progress 会清掉绑定 —— 人可以夺权', () => {
+  const s = tempStore()
+  try {
+    appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: '甲' }, s.path)
+    appendOp({ ts: at(2), actor: 'user', work: 't1', op: 'status', from: 'backlog', to: 'todo' }, s.path)
+    appendOp({ ts: at(3), actor: 'agent', work: 't1', op: 'status', from: 'todo', to: 'in_progress',
+      binding: { session: 'sess-A', workspace: '/tmp/w' } }, s.path)
+    appendOp({ ts: at(4), actor: 'user', work: 't1', op: 'status', from: 'in_progress', to: 'in_progress' }, s.path)
+    assert.equal(fold(readOps(s.path)).get('t1').binding, undefined)
+    assert.equal(workState('t1', { path: s.path, session: 'sess-B' }).ok, true)
+  } finally { s.cleanup() }
+})
+
+test('claim 把 todo 挪成 in_progress 并记下绑定', () => {
+  const s = tempStore()
+  try {
+    appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: '甲' }, s.path)
+    appendOp({ ts: at(2), actor: 'user', work: 't1', op: 'status', from: 'backlog', to: 'todo' }, s.path)
+    claim('t1', 'todo', { session: 'sess-A', workspace: '/tmp/w' }, s.path)
+    const w = fold(readOps(s.path)).get('t1')
+    assert.equal(w.status, 'in_progress')
+    assert.deepEqual(w.binding, { session: 'sess-A', workspace: '/tmp/w' })
   } finally { s.cleanup() }
 })
 

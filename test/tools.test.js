@@ -26,7 +26,7 @@ import { draftTool } from '../lib/tools/draft.js'
 import { reviseTool } from '../lib/tools/revise.js'
 import { reviewTool } from '../lib/tools/review.js'
 
-const exec = /** @type {any} */ ({ callId: 'call_test_1' })
+const exec = /** @type {any} */ ({ callId: 'call_test_1', agent: { id: 'sess-test' } })
 
 /**
  * 每个用例一个干净的 ~/.metaboard/。工具在 execute 里读这个日志校验工作项存在,
@@ -209,6 +209,7 @@ test('review:本来就是记录式,写一条进对话上下文并带上 callId',
   const appended = []
   const reviewExec = /** @type {any} */ ({
     callId: 'call_test_1',
+    agent: { id: 'sess-test' },
     deferContext: (/** @type {any} */ m) => appended.push(m),
   })
   const value = await reviewTool().execute(
@@ -290,3 +291,15 @@ test('agent 建的项立刻就被自己的门挡住 —— 记录不等于授权
     'agent 新建一个条目就能自己给自己发通行证的话，这道门等于不存在')
   assert.match(v.error, /not approved|待立项/)
 }))
+
+test('拿不到会话身份时,工具拒绝干活而不是造半个绑定', async () => {
+  await withStore(async (mk) => {
+    const id = mk()
+    appendOp({ ts: new Date().toISOString(), actor: 'user', work: id, op: 'status', from: 'backlog', to: 'todo' })
+    const tool = draftTool()
+    // exec 上没有 agent —— 会话身份不可得。
+    const out = await tool.execute({ work: id, draft: '正文' }, /** @type {any} */ ({ callId: 'call_x' }))
+    assert.match(out.error ?? '', /conversation identity/)
+    assert.equal(fold(readOps()).get(id).status, 'todo', '状态不该被动过')
+  })
+})
