@@ -101,11 +101,13 @@ test('四个内容工具都校验工作项', () => withStore(async () => {
     () => reviseTool().execute({ work: 't99', notes: 'n', revised: 'x' }, exec),
     () => reviewTool().execute(
       { work: 't99', decision: 'reject', note: 'n' },
-      /** @type {any} */ ({ callId: 'c1', deferContext: () => {} })),
+      /** @type {any} */ ({ callId: 'c1', agent: { id: 'sess-test' }, deferContext: () => {} })),
   ]
   for (const call of calls) {
     const value = await call()
-    assert.equal(value.error !== undefined, true, '有工具没校验工作项')
+    // 不止要报错,还要是「工作项不存在」这条错 —— 否则会话身份的拒绝也能
+    // 让这条断言通过,测不出工具到底校验没校验工作项。
+    assert.match(value.error ?? '', /t99/, '有工具没校验工作项')
   }
 }))
 
@@ -240,11 +242,12 @@ test('四个内容工具都守这道门', () => withStore(async (mk) => {
     () => draftTool().execute({ work: id, draft: 'x' }, exec),
     () => reviseTool().execute({ work: id, notes: 'n', revised: 'x' }, exec),
     () => reviewTool().execute({ work: id, decision: 'reject', note: 'n' },
-      /** @type {any} */ ({ callId: 'c1', deferContext: () => {} })),
+      /** @type {any} */ ({ callId: 'c1', agent: { id: 'sess-test' }, deferContext: () => {} })),
   ]
   for (const call of calls) {
     const v = await call()
-    assert.equal(v.error !== undefined, true, '有工具没守立项这道门')
+    // 同上:得是「未立项」这条错,不是随便哪条错都算数。
+    assert.match(v.error ?? '', /not approved|待立项/, '有工具没守立项这道门')
   }
 }))
 
