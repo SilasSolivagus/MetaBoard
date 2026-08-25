@@ -399,3 +399,37 @@ test('正文超过上限时说清楚为什么，而不是写进去', async () =>
     assert.match(out.error ?? '', /limit/)
   })
 })
+
+// ─────────────────────────── presentationMeta（信封路径） ───────────────────────────
+
+// execute() 和 output.render() 被单元测试直接调用过很多遍,但 presentationMeta 从未被
+// 调用过 —— 这正是 read 与 report 两个新 kind 没进 KINDS 白名单却仍然 159 条全绿的原因。
+// makeMeta 按 KINDS 校验 kind,漏了就抛,抛了就没有信封,账本上留一行永久 running(R12/R16)。
+// 这两条测试把这条从未被走过的路径走一遍。
+
+test('work_read 的 presentationMeta 产出合法信封,kind 是 read', async () => {
+  await withStore(async (mk) => {
+    const id = mk('甲')
+    const tool = readTool()
+    const args = { work: id }
+    const value = await tool.execute(args, exec)
+    const meta = /** @type {any} */ (tool.output.presentationMeta(args, value))
+    assert.equal(meta.subject, id)
+    assert.equal(meta.kind, 'read')
+    assert.equal(meta.payload, value)
+  })
+})
+
+test('report 的 presentationMeta 产出合法信封,kind 是 report', async () => {
+  await withStore(async (mk) => {
+    const id = mk()
+    appendOp({ ts: new Date().toISOString(), actor: 'user', work: id, op: 'status', from: 'backlog', to: 'todo' })
+    const tool = reportTool()
+    const args = { work: id, body: '开工' }
+    const value = await tool.execute(args, exec)
+    const meta = /** @type {any} */ (tool.output.presentationMeta(args, value))
+    assert.equal(meta.subject, id)
+    assert.equal(meta.kind, 'report')
+    assert.equal(meta.payload, value)
+  })
+})
