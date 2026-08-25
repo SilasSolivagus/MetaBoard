@@ -58,7 +58,10 @@ test('归到不存在的项目要报错,不是默默写进去', () => {
   const s = box()
   try {
     s.run(['new', '活儿'])
-    assert.throws(() => s.run(['set-project', 't1', 'p9']), /p9/)
+    // 不用 /p9/ —— execFileSync 失败时的 message 里总带着失败的完整命令行(含参数),
+    // 光靠 p9 出现在那里,不管 CLI 到底是不是为了这个理由拒绝都会匹配上。
+    // 改成 CLI 自己吐出来的措辞,才是真的验到了「没有这个项目」这条判断。
+    assert.throws(() => s.run(['set-project', 't1', 'p9']), /没有这个项目/)
   } finally { s.cleanup() }
 })
 
@@ -66,5 +69,21 @@ test('project new --path 只收绝对路径', () => {
   const s = box()
   try {
     assert.throws(() => s.run(['project', 'new', '甲', '--path', 'relative/dir']), /绝对路径|absolute/)
+  } finally { s.cleanup() }
+})
+
+test('旗标重复要报错,而且什么都不写进去', () => {
+  const s = box()
+  try {
+    assert.throws(() => s.run(['new', '活儿', '--project', 'p1', '--project', 'p2']), /--project 给了不止一个/)
+    // 拒绝发生在 appendOp 之前 —— 确认真没写进去,不只是报了句话。
+    assert.doesNotMatch(s.run(['ls', '--all']), /活儿/)
+  } finally { s.cleanup() }
+})
+
+test('旗标后面没有值要报错', () => {
+  const s = box()
+  try {
+    assert.throws(() => s.run(['new', '活儿', '--project']), /--project 后面要跟一个值/)
   } finally { s.cleanup() }
 })

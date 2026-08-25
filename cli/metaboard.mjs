@@ -22,12 +22,23 @@ const hhmm = (/** @type {number} */ ms) => {
 
 /**
  * 从参数里摘掉一个带值的旗标,返回它的值。
- * 摘掉是必须的 —— 标题是 rest.join(' ') 拼出来的,旗标留在里面会变成标题的一部分。
+ *
+ * 摘掉是必须的 —— 标题是 rest.join(' ') 拼出来的,旗标留在里面会变成标题的一部分,
+ * 然后被写进只追加的日志里删不掉。
+ *
+ * 两种「敲了但没生效」的写法直接报错,不猜:
+ *   metaboard new 标题 --project p1 --project p2   哪个算数?
+ *   metaboard new 标题 --project                   值呢?
+ * 沉默地取第一个、或沉默地当没写过,都会让人以为自己的输入生效了。
+ *
  * @param {string[]} rest @param {string} name
+ * @returns {string|undefined}
  */
 function takeFlag(rest, name) {
   const i = rest.indexOf(name)
   if (i === -1) return undefined
+  if (rest.indexOf(name, i + 1) !== -1) throw new Error(`${name} 给了不止一个`)
+  if (i + 1 >= rest.length) throw new Error(`${name} 后面要跟一个值`)
   const [, value] = rest.splice(i, 2)
   return value
 }
@@ -260,4 +271,6 @@ function fail(msg) {
   process.exitCode = 1
 }
 
-main(process.argv.slice(2))
+// takeFlag 抛出的是「敲了但没生效」的错,走 fail() 的老路:stderr + 非零退出,
+// 不让它变成没捕获的 rejection、把调用栈甩给用户看。
+main(process.argv.slice(2)).catch((/** @type {Error} */ err) => fail(err.message))
