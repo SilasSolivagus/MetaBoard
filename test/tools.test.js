@@ -25,6 +25,7 @@ import { researchTool } from '../lib/tools/research.js'
 import { draftTool } from '../lib/tools/draft.js'
 import { reviseTool } from '../lib/tools/revise.js'
 import { reviewTool } from '../lib/tools/review.js'
+import { readTool } from '../lib/tools/read.js'
 
 const exec = /** @type {any} */ ({ callId: 'call_test_1', agent: { id: 'sess-test' } })
 
@@ -304,5 +305,37 @@ test('拿不到会话身份时,工具拒绝干活而不是造半个绑定', asyn
     const out = await tool.execute({ work: id, draft: '正文' }, /** @type {any} */ ({ callId: 'call_x' }))
     assert.match(out.error ?? '', /conversation identity/)
     assert.equal(fold(readOps()).get(id).status, 'todo', '状态不该被动过')
+  })
+})
+
+// ─────────────────────────── read ───────────────────────────
+
+test('work_read 把要求读回来,待立项的也能读 —— 读不需要授权', async () => {
+  await withStore(async (mk) => {
+    const id = mk('夜跑装备', 'backlog')
+    appendOp({ ts: new Date().toISOString(), actor: 'user', work: id, op: 'comment', body: '别写成带货' })
+    const out = await readTool().execute({ work: id }, exec)
+    assert.equal(out.error, undefined, '待立项不该挡住读')
+    assert.equal(out.approved, false)
+    assert.equal(out.comments.length, 1)
+    assert.equal(out.comments[0].body, '别写成带货')
+  })
+})
+
+test('work_read 引用不存在的工作项时返回 error,不抛', async () => {
+  await withStore(async () => {
+    const out = await readTool().execute({ work: 't999' }, exec)
+    assert.match(out.error ?? '', /t999/)
+  })
+})
+
+test('work_read 的渲染把留言正文带出来 —— 读不到正文等于没读', async () => {
+  await withStore(async (mk) => {
+    const id = mk('甲')
+    appendOp({ ts: new Date().toISOString(), actor: 'user', work: id, op: 'comment', body: '第三段没有出处' })
+    const tool = readTool()
+    const value = await tool.execute({ work: id }, exec)
+    const text = tool.output.render({ work: id }, value).map((/** @type {any} */ p) => p.text).join('\n')
+    assert.match(text, /第三段没有出处/)
   })
 })

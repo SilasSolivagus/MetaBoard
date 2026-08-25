@@ -41,6 +41,7 @@ export function describe(e) {
     case 'draft': return `写了 ${p.charCount ?? p.draft?.length ?? '?'} 字`
     case 'review': return `${p.decision === 'reject' ? '打回' : '通过'}：${p.note ?? ''}`
     case 'revise': return `改到 ${p.charCount ?? '?'} 字`
+    case 'read': return `读了要求（${p.comments?.length ?? 0} 条留言）`
     default: return e.kind
   }
 }
