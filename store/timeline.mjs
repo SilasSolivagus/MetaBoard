@@ -21,6 +21,7 @@ export function describe(e) {
     if (e.op === 'create') return `开工作项：${e.title}`
     if (e.op === 'status') return `状态 ${e.from ?? '?'} → ${e.to}`
     if (e.op === 'title') return `改名为：${e.to}`
+    if (e.op === 'comment') return `${e.actor === 'agent' ? 'agent' : '你'}留言：${e.body}`
     if (e.op === 'archive') return '归档'
     return e.op
   }
@@ -56,7 +57,21 @@ export function mergeTimeline(ops, events) {
   // 看板状态的权威。但在合并视图里它们是同一件事,显示两遍是噪音。
   // 规则:看板事实以 C 类日志为准,信封条目让位。('topic' 是 'work' 的旧 kind 名。)
   const created = ops.some((o) => o.op === 'create')
-  const kept = created ? events.filter((e) => e.kind !== 'work' && e.kind !== 'topic') : events
+
+  // agent 的自述同理:metaboard_report 既写了 comment 操作又发了信封。
+  // 但这里不能按 kind 一刀切 —— 写失败的自述只有信封没有 comment,那条必须看得见。
+  // 所以按 callId 对齐:comment 操作记下了是哪次调用写的,只让那一次的信封条目让位。
+  // 这和 R21 是同一条纪律:抑制的条件写前提本身(这条 comment 确实落地了),
+  // 不写旁证(这次调用看起来成功了)。
+  const coveredCalls = new Set(
+    ops.filter((o) => o.op === 'comment' && typeof o.callId === 'string').map((o) => o.callId))
+
+  const kept = events.filter((e) => {
+    if (created && (e.kind === 'work' || e.kind === 'topic')) return false
+    const id = e.payload?.callId ?? e.callId
+    if (typeof id === 'string' && coveredCalls.has(id)) return false
+    return true
+  })
 
   const entries = [
     ...ops.map((o) => ({ at: Date.parse(o.ts), source: 'board', actor: o.actor, ...o })),

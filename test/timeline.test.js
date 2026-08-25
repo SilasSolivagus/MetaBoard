@@ -75,3 +75,31 @@ test('C 类日志里没有 create 时,信封的 topic 条目保留 —— 不能
   assert.equal(line.length, 1)
   assert.match(describe(line[0]), /开工作项/)
 })
+
+test('describe 把留言说成人话,人和 agent 分开', () => {
+  assert.match(describe({ source: 'board', op: 'comment', actor: 'user', body: '标题再短一点' }), /你.*标题再短一点/)
+  assert.match(describe({ source: 'board', op: 'comment', actor: 'agent', body: '改完了,没验' }), /agent.*改完了/)
+})
+
+test('agent 写的留言不显示两遍 —— 看板那条为准,信封那条让位', () => {
+  const ops = [
+    { ts: '2026-08-24T10:00:00.000Z', actor: 'user', work: 't1', op: 'create', title: '甲' },
+    { ts: '2026-08-24T10:05:00.000Z', actor: 'agent', work: 't1', op: 'comment', body: '自述', callId: 'call_9' },
+  ]
+  const events = [
+    { at: Date.parse('2026-08-24T10:05:00.000Z'), kind: 'report', callId: 'call_9', payload: { body: '自述', callId: 'call_9' } },
+  ]
+  const merged = mergeTimeline(ops, events)
+  assert.equal(merged.filter((e) => (e.body ?? e.payload?.body) === '自述').length, 1)
+})
+
+test('callId 对不上的信封条目不被吃掉 —— 写失败的自述要看得见', () => {
+  const ops = [
+    { ts: '2026-08-24T10:00:00.000Z', actor: 'user', work: 't1', op: 'create', title: '甲' },
+    { ts: '2026-08-24T10:05:00.000Z', actor: 'agent', work: 't1', op: 'comment', body: '自述', callId: 'call_9' },
+  ]
+  const events = [
+    { at: Date.parse('2026-08-24T10:06:00.000Z'), kind: 'report', callId: 'call_10', payload: { error: '写不进去', callId: 'call_10' } },
+  ]
+  assert.equal(mergeTimeline(ops, events).filter((e) => e.source === 'session').length, 1)
+})

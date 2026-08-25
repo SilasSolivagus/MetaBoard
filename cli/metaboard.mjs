@@ -7,7 +7,7 @@
  * 「跨进程的数据路径」——外部程序读 dsh 的日志、写自己的选题表、把两条线并起来。
  * 那条路通不通,用 CLI 就能验完;先堆界面只会把风险推后。
  */
-import { readOps, fold, appendOp, allocateId, storePath, STATUSES, MAIN_STATUSES,
+import { readOps, fold, appendOp, appendChecked, allocateId, storePath, STATUSES, MAIN_STATUSES,
   SECONDARY_STATUSES, STATUS_LABEL, opWork } from '../store/works.mjs'
 import { collectEvents, eventSummary, sessionRoot } from '../store/sessions.mjs'
 import { mergeTimeline, describe } from '../store/timeline.mjs'
@@ -50,6 +50,8 @@ function usage() {
   metaboard ls [--project <pid>] [--all]   看板：只显示已立项的流水线（--all 连待立项/完成一起列）
   metaboard show <id>               这个工作项的完整时间线（状态变更 + 会话事件）
   metaboard status <id> <状态>       状态取值：${STATUSES.join(' / ')}
+  metaboard comment <id> <正文>     给工作项留一句话（要求、疑问、说明）
+  metaboard return <id> <理由>      打回：等你确认 → 处理中，理由写进留言
   metaboard rename <id> <新标题>
   metaboard archive <id>
   metaboard set-project <id> <pid|->   归属到项目，- 取消归属
@@ -220,6 +222,33 @@ async function main(argv) {
     }
     appendOp({ ts: now(), actor: 'user', work: id, op: 'status', from: t.status, to })
     console.log(`${id}  ${STATUS_LABEL[t.status]} → ${STATUS_LABEL[to]}`)
+    return
+  }
+
+  if (cmd === 'comment') {
+    const [id, ...words] = rest
+    const t = id === undefined ? undefined : works.get(id)
+    if (t === undefined) return fail(`没有这个工作项：${id ?? '(未指定)'}`)
+    const body = words.join(' ').trim()
+    if (body === '') return fail('要写点什么：metaboard comment <id> <正文>')
+    appendOp({ ts: now(), actor: 'user', work: id, op: 'comment', body })
+    console.log(`${id} 已留言。agent 下次读这个工作项时会看到。`)
+    return
+  }
+
+  if (cmd === 'return') {
+    const [id, ...words] = rest
+    const t = id === undefined ? undefined : works.get(id)
+    if (t === undefined) return fail(`没有这个工作项：${id ?? '(未指定)'}`)
+    if (t.status !== 'in_review') return fail(`${id} 现在是${STATUS_LABEL[t.status]}，不在等你确认，没什么可打回的`)
+    const body = words.join(' ').trim()
+    if (body === '') return fail('打回要给理由：metaboard return <id> <理由>')
+    // 两条一起写。理由落了地而状态没改,读的人会以为活儿还在 agent 手上。
+    appendChecked([
+      { ts: now(), actor: 'user', work: id, op: 'comment', body },
+      { ts: now(), actor: 'user', work: id, op: 'status', from: 'in_review', to: 'in_progress' },
+    ], { ifVersion: t.version })
+    console.log(`${id} 已打回，理由记在留言里。`)
     return
   }
 

@@ -87,3 +87,34 @@ test('旗标后面没有值要报错', () => {
     assert.throws(() => s.run(['new', '活儿', '--project']), /--project 后面要跟一个值/)
   } finally { s.cleanup() }
 })
+
+test('comment 留言,show 里看得到', () => {
+  const s = box()
+  try {
+    s.run(['new', '活儿'])
+    s.run(['comment', 't1', '标题再短一点'])
+    assert.match(s.run(['show', 't1']), /标题再短一点/)
+  } finally { s.cleanup() }
+})
+
+test('return 打回:一次动作里既留了理由又改了状态', () => {
+  const s = box()
+  try {
+    s.run(['new', '活儿'])
+    s.run(['approve', 't1'])
+    s.run(['status', 't1', 'in_review'])
+    s.run(['return', 't1', '第三段没有出处'])
+    const out = s.run(['show', 't1'])
+    assert.match(out, /第三段没有出处/)
+    assert.match(out, /处理中/)
+  } finally { s.cleanup() }
+})
+
+test('不在等你确认的工作项打不回', () => {
+  const s = box()
+  try {
+    s.run(['new', '活儿'])
+    s.run(['approve', 't1'])
+    assert.throws(() => s.run(['return', 't1', '理由']), /等你确认/)
+  } finally { s.cleanup() }
+})
