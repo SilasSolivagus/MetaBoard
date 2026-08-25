@@ -13,7 +13,7 @@
  */
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { metaboardHome } from './works.mjs'
+import { metaboardHome, ACTORS } from './works.mjs'
 
 export const PROJECT_OPS = /** @type {const} */ (['create', 'rename', 'archive'])
 
@@ -25,6 +25,8 @@ export function projectsPath() {
 function validate(op) {
   if (typeof op !== 'object' || op === null) throw new Error('op must be an object')
   if (!PROJECT_OPS.includes(op.op)) throw new Error(`unknown project op: ${JSON.stringify(op.op)}`)
+  // actor 和工作项表一样要校验。两本日志都是只追加、写进去删不掉,校验强度不该不一样。
+  if (!ACTORS.includes(op.actor)) throw new Error(`unknown actor: ${JSON.stringify(op.actor)}`)
   if (typeof op.project !== 'string' || op.project === '') throw new Error('op.project must be a non-empty string')
   if (typeof op.ts !== 'string' || Number.isNaN(Date.parse(op.ts))) throw new Error('op.ts must be an ISO timestamp')
   if (op.op === 'create') {

@@ -101,3 +101,14 @@ test('工作项归到项目,再取消归属', () => {
     assert.equal(fold(readOps()).get('t1').project, undefined)
   } finally { s.cleanup() }
 })
+
+test('actor 必须有效,不合法的 actor 抛出异常且日志未写入', () => {
+  const s = tempStore()
+  try {
+    assert.throws(
+      () => appendProjectOp({ ts: at(1), actor: 'garbage', project: 'p1', op: 'create', name: '测试' }),
+      /unknown actor/
+    )
+    assert.equal(readProjectOps().length, 0, '日志应该是空的')
+  } finally { s.cleanup() }
+})
