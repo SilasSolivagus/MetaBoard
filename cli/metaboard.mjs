@@ -11,6 +11,7 @@ import { readOps, fold, appendOp, allocateId, storePath, STATUSES, MAIN_STATUSES
   SECONDARY_STATUSES, STATUS_LABEL, opWork } from '../store/works.mjs'
 import { collectEvents, eventSummary, sessionRoot } from '../store/sessions.mjs'
 import { mergeTimeline, describe } from '../store/timeline.mjs'
+import { appendProjectOp, readProjectOps, foldProjects, allocateProjectId, projectsPath } from '../store/projects.mjs'
 
 const now = () => new Date().toISOString()
 const hhmm = (/** @type {number} */ ms) => {
@@ -19,15 +20,32 @@ const hhmm = (/** @type {number} */ ms) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
+/**
+ * 从参数里摘掉一个带值的旗标,返回它的值。
+ * 摘掉是必须的 —— 标题是 rest.join(' ') 拼出来的,旗标留在里面会变成标题的一部分。
+ * @param {string[]} rest @param {string} name
+ */
+function takeFlag(rest, name) {
+  const i = rest.indexOf(name)
+  if (i === -1) return undefined
+  const [, value] = rest.splice(i, 2)
+  return value
+}
+
 function usage() {
   console.log(`用法：
-  metaboard new <标题>              记一个想法，落在「待立项」
+  metaboard new <标题> [--project <pid>]   记一个想法，落在「待立项」
   metaboard approve <id>            立项：允许 agent 开始做这件事
-  metaboard ls [--all]              看板：只显示已立项的流水线（--all 连待立项/完成一起列）
+  metaboard ls [--project <pid>] [--all]   看板：只显示已立项的流水线（--all 连待立项/完成一起列）
   metaboard show <id>               这个工作项的完整时间线（状态变更 + 会话事件）
   metaboard status <id> <状态>       状态取值：${STATUSES.join(' / ')}
   metaboard rename <id> <新标题>
   metaboard archive <id>
+  metaboard set-project <id> <pid|->   归属到项目，- 取消归属
+  metaboard project new <名字> [--path <绝对目录>]
+  metaboard project ls
+  metaboard project rename <pid> <新名字>
+  metaboard project archive <pid>
   metaboard doctor                  检查两边的数据源读不读得到
 
 工作项表：${storePath()}
@@ -41,23 +59,87 @@ async function main(argv) {
 
   if (cmd === undefined || cmd === 'help' || cmd === '--help') return usage()
 
+  if (cmd === 'project') {
+    const [sub, ...args] = rest
+    const projects = foldProjects(readProjectOps())
+    if (sub === 'new') {
+      const path = takeFlag(args, '--path')
+      if (path !== undefined && !path.startsWith('/')) return fail('--path 要绝对路径')
+      const name = args.join(' ').trim()
+      if (name === '') return fail('要给项目一个名字：metaboard project new <名字>')
+      const id = allocateProjectId(projects)
+      appendProjectOp({ ts: now(), actor: 'user', project: id, op: 'create', name, path })
+      console.log(`${id}  ${name}${path === undefined ? '' : `  ${path}`}`)
+      return
+    }
+    if (sub === 'ls') {
+      const alive = [...projects.values()].filter((p) => p.archivedAt === undefined)
+      if (alive.length === 0) { console.log('还没有项目。用 metaboard project new <名字> 建一个。'); return }
+      for (const p of alive) console.log(`  ${p.id.padEnd(4)} ${p.name}${p.path === undefined ? '' : `  ${p.path}`}`)
+      return
+    }
+    if (sub === 'rename') {
+      const [pid, ...words] = args
+      if (pid === undefined || !projects.has(pid)) return fail(`没有这个项目：${pid ?? '(未指定)'}`)
+      const to = words.join(' ').trim()
+      if (to === '') return fail('要给新名字：metaboard project rename <pid> <新名字>')
+      appendProjectOp({ ts: now(), actor: 'user', project: pid, op: 'rename', to })
+      console.log(`${pid}  ${to}`)
+      return
+    }
+    if (sub === 'archive') {
+      const pid = args[0]
+      if (pid === undefined || !projects.has(pid)) return fail(`没有这个项目：${pid ?? '(未指定)'}`)
+      appendProjectOp({ ts: now(), actor: 'user', project: pid, op: 'archive' })
+      console.log(`${pid} 已归档。归属它的工作项不动，只是不再参与目录匹配。`)
+      return
+    }
+    return fail(`不认识的 project 子命令：${sub ?? '(未指定)'}`)
+  }
+
+  if (cmd === 'set-project') {
+    const [id, pid] = rest
+    const t = id === undefined ? undefined : works.get(id)
+    if (t === undefined) return fail(`没有这个工作项：${id ?? '(未指定)'}`)
+    if (pid === undefined) return fail('要指定项目：metaboard set-project <id> <pid|->')
+    if (pid === '-') {
+      appendOp({ ts: now(), actor: 'user', work: id, op: 'project', to: null })
+      console.log(`${id} 已取消项目归属。`)
+      return
+    }
+    if (!foldProjects(readProjectOps()).has(pid)) return fail(`没有这个项目：${pid}`)
+    appendOp({ ts: now(), actor: 'user', work: id, op: 'project', to: pid })
+    console.log(`${id} 归到 ${pid}。`)
+    return
+  }
+
   if (cmd === 'new') {
+    const pid = takeFlag(rest, '--project')
+    if (pid !== undefined && !foldProjects(readProjectOps()).has(pid)) return fail(`没有这个项目：${pid}`)
     const title = rest.join(' ').trim()
     if (title === '') return fail('要给工作项一个标题：metaboard new <标题>')
     const id = allocateId(works)
     // 你在这里记下的是想法,不是任务 —— 落在待立项,agent 碰不到,
     // 直到你 approve。agent 在对话里建的项走另一条路,直接是等待认领。
     appendOp({ ts: now(), actor: 'user', work: id, op: 'create', title, status: 'backlog' })
+    if (pid !== undefined) appendOp({ ts: now(), actor: 'user', work: id, op: 'project', to: pid })
     console.log(`${id}  ${title}\n待立项。想让 agent 做，先 metaboard approve ${id}`)
     return
   }
 
   if (cmd === 'ls') {
+    const pid = takeFlag(rest, '--project')
     const showAll = rest.includes('--all')
+    const projects = foldProjects(readProjectOps())
+    if (pid !== undefined && !projects.has(pid)) return fail(`没有这个项目：${pid}`)
     const summary = await eventSummary()
-    const alive = [...works.values()].filter((t) => showAll || t.archivedAt === undefined)
+    const alive = [...works.values()]
+      .filter((t) => showAll || t.archivedAt === undefined)
+      .filter((t) => pid === undefined || t.project === pid)
     if (alive.length === 0) {
-      console.log('还没有工作项。用 metaboard new <标题> 开一个。')
+      console.log(pid === undefined
+        ? '还没有工作项。用 metaboard new <标题> 开一个。'
+        : `${pid} 下面还没有工作项。用 metaboard new <标题> --project ${pid} 开一个。`)
       return
     }
     // 看板只放已授权的流水线;待立项、完成、取消收在 --all 里。
@@ -79,7 +161,10 @@ async function main(argv) {
         const w = summary.get(t.id)
         const tail = w === undefined ? '尚无会话记录' : `${w.count} 条会话记录，最后 ${hhmm(w.lastAt)}`
         const mark = t.archivedAt === undefined ? '' : ' [已归档]'
-        console.log(`  ${t.id.padEnd(5)} ${t.title}${mark}  —  ${tail}`)
+        // 已经按项目过滤过时不再重复显示项目名 —— 每行都挂同一个名字是噪音。
+        const proj = (pid !== undefined || t.project === undefined)
+          ? '' : ` [${projects.get(t.project)?.name ?? t.project}]`
+        console.log(`  ${t.id.padEnd(5)} ${t.title}${proj}${mark}  —  ${tail}`)
       }
     }
     return
@@ -151,6 +236,8 @@ async function main(argv) {
     const logs = await eventSummary()
     console.log(`工作项表  ${storePath()}`)
     console.log(`        ${works.size} 个工作项`)
+    console.log(`项目表    ${projectsPath()}`)
+    console.log(`        ${foldProjects(readProjectOps()).size} 个项目`)
     console.log(`dsh 会话 ${sessionRoot()}`)
     console.log(`        ${logs.size} 个 id 在会话里有记录`)
     const orphan = [...logs.keys()].filter((s) => !works.has(s))
