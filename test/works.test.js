@@ -315,10 +315,27 @@ test('claim 把 todo 挪成 in_progress 并记下绑定', () => {
   try {
     appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: '甲' }, s.path)
     appendOp({ ts: at(2), actor: 'user', work: 't1', op: 'status', from: 'backlog', to: 'todo' }, s.path)
-    claim('t1', 'todo', { session: 'sess-A', workspace: '/tmp/w' }, s.path)
+    claim('t1', { session: 'sess-A', workspace: '/tmp/w' }, s.path)
     const w = fold(readOps(s.path)).get('t1')
     assert.equal(w.status, 'in_progress')
     assert.deepEqual(w.binding, { session: 'sess-A', workspace: '/tmp/w' })
+  } finally { s.cleanup() }
+})
+
+test('没有绑定的工作项,不在 todo 上也能认领,而且状态不动', () => {
+  const s = tempStore()
+  try {
+    // 打回之后的样子:处理中,但没有人占着。
+    appendOp({ ts: at(1), actor: 'user', work: 't1', op: 'create', title: '甲', status: 'in_progress' }, s.path)
+    claim('t1', { session: 'sess-B', workspace: '/tmp/w' }, s.path)
+    const w = fold(readOps(s.path)).get('t1')
+    assert.equal(w.status, 'in_progress', '认领不该顺手改状态')
+    assert.deepEqual(w.binding, { session: 'sess-B', workspace: '/tmp/w' })
+    // 别的会话再来就该被拒,而且日志不动。
+    assert.throws(
+      () => claim('t1', { session: 'sess-C', workspace: '/tmp/w' }, s.path),
+      (e) => e instanceof ConflictError && e.code === 'binding')
+    assert.equal(readOps(s.path).length, 2)
   } finally { s.cleanup() }
 })
 

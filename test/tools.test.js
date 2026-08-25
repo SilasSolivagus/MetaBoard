@@ -315,6 +315,37 @@ test('agent 建的项立刻就被自己的门挡住 —— 记录不等于授权
   assert.match(v.error, /not approved|待立项/)
 }))
 
+// 绑定这件事,分支的说法是「一个工作项同时只属于一个会话」。它原先只在
+// todo → in_progress 这一条边上成立:交回、打回、人接手之后工作项没有绑定,
+// 而认领只在 todo 上触发 —— 于是打回之后两个会话可以同时往同一个工作项上写,
+// 谁也不会被拒。这条走的正是产品自己的主循环。
+test('交回、打回之后:下一个会话接得上,原会话再写就被拒', () => withStore(async (mk) => {
+  const execA = /** @type {any} */ ({ callId: 'call_A', agent: { id: 'sess-A' } })
+  const execB = /** @type {any} */ ({ callId: 'call_B', agent: { id: 'sess-B' } })
+  const id = mk('已立项', 'todo')
+
+  // A 认领、干活、交回。交回把工作项挪到等你确认,绑定随之释放。
+  const handed = await reportTool().execute({ work: id, body: '做完了', handoff: true }, execA)
+  assert.equal(handed.error, undefined)
+  assert.equal(fold(readOps()).get(id).status, 'in_review')
+
+  // 人打回(metaboard return 的两条:留言 + 状态)。人挪状态就是释放绑定。
+  appendOp({ ts: new Date(Date.UTC(2026, 7, 24, 12)).toISOString(),
+    actor: 'user', work: id, op: 'comment', body: '第三段没有出处' })
+  appendOp({ ts: new Date(Date.UTC(2026, 7, 24, 12, 1)).toISOString(),
+    actor: 'user', work: id, op: 'status', from: 'in_review', to: 'in_progress' })
+  assert.equal(fold(readOps()).get(id).binding, undefined, '人挪状态就该释放绑定')
+
+  // B 接手。没有绑定的工作项,谁先写谁拿到 —— 和 todo 上的规矩一样。
+  const bOut = await draftTool().execute({ work: id, draft: '补了出处的正文' }, execB)
+  assert.equal(bOut.error, undefined)
+  assert.equal(fold(readOps()).get(id).binding?.session, 'sess-B', 'B 写了却没拿到绑定')
+
+  // A 再写就该被拒。这是分支自称守住的那条线。
+  const aOut = await draftTool().execute({ work: id, draft: '我还在写' }, execA)
+  assert.match(aOut.error ?? '', /another conversation/, '两个会话同时写同一个工作项,没有被拦下')
+}))
+
 test('拿不到会话身份时,工具拒绝干活而不是造半个绑定', async () => {
   await withStore(async (mk) => {
     const id = mk()

@@ -270,8 +270,14 @@ export function fold(ops) {
     if (t === undefined) continue
     if (op.op === 'status') {
       t.status = LEGACY_STATUS[op.to] ?? op.to
-      // 绑定跟着状态走:进 in_progress 记下是谁在做,离开就清掉。
-      t.binding = t.status === 'in_progress' ? op.binding : undefined
+      // 绑定跟着状态操作走:带绑定的状态操作就是认领,不带的就是释放。
+      //
+      // 原先的条件是「落地状态是 in_progress 才留绑定」。那条把绑定绑在了一个
+      // 状态上,而绑定问的其实是「现在这活儿在谁手里」—— 交回等你确认之后 agent
+      // 还可能被打回来接着改,那时它照样该独占。改成看操作本身带不带绑定:
+      // 人挪状态从不带绑定,所以人挪状态仍然是释放(R28,人可以夺权);
+      // agent 认领带绑定;agent 交回不带,于是交回就是释放。
+      t.binding = op.binding
     } else if (op.op === 'title') t.title = op.to
     else if (op.op === 'archive') t.archivedAt = op.ts
     else if (op.op === 'comment') t.comments.push({ ts: op.ts, actor: op.actor, body: op.body, callId: op.callId })
@@ -359,22 +365,47 @@ export function workState(id, opts = {}) {
 }
 
 /**
- * 认领:把 todo 挪成 in_progress,并记下是哪个会话在做。
+ * 认领:没人占着就归写的人,并记下是哪个会话在做。
  *
  * 照 dashi 的 threadBinding。它要求五段身份齐全才允许认领,少一段就停下 ——
  * 「never create a legacy binding containing only threadId」。半个绑定比没有绑定
  * 更坏,因为它看起来像有保护。我们的两段是会话与工作区,同样是齐了才写。
  *
+ * 触发条件改过一次。原先只认 todo → in_progress 这一条边,理由是「认领就是从
+ * 等待认领里领走」。那条让绑定只在工作项的第一程里成立:agent 交回、人打回之后
+ * 工作项处在 in_progress 而没有绑定,再有会话来写也不会触发认领,于是两个会话
+ * 可以同时往同一个工作项上写。而「打回重改」正是这个产品的主循环。
+ *
+ * 现在的规则:**当前没有绑定就归第一个来写的会话**,不管它是什么状态 ——
+ * 这和 todo 原本的规矩是同一条,只是不再挑状态。已经绑给别人的仍然拒绝(R28:
+ * 人可以夺权,agent 不行)。绑定由状态操作承载,所以在非 todo 的状态上认领写的是
+ * 一条 from 与 to 相同、带着绑定的状态操作。
+ *
+ * 读当前状态放在锁里,不接调用方先前读到的状态 —— 那个值在写下去的一刻可能已经旧了。
+ *
  * @param {string} id
- * @param {string} from
  * @param {{ session: string, workspace: string }} binding
  * @param {string} [path]
  */
-export function claim(id, from, binding, path) {
-  if (from !== 'todo') return
-  appendChecked(
-    { ts: new Date().toISOString(), actor: 'agent', work: id, op: 'status', from, to: 'in_progress', binding },
-    { binding }, path)
+export function claim(id, binding, path = storePath()) {
+  withLock(path, () => {
+    const w = fold(readOps(path)).get(id)
+    if (w === undefined) return
+    if (w.binding !== undefined) {
+      // 已经是自己的:不重复写。日志里堆一串同样的流转,读的人分不出哪次是真的交接。
+      if (w.binding.session === binding.session) return
+      throw new ConflictError('binding',
+        `${id} is claimed by another conversation (${w.binding.session}). Never take over another `
+        + "agent's claim — report it instead.")
+    }
+    // agent 不许写的状态上不认领。认领是靠状态操作承载绑定的,写不了状态就认领不了;
+    // 而这些是终态,没有第二个会话会来抢,不绑定也不会有人打架。
+    if (AGENT_FORBIDDEN.includes(w.status)) return
+    const to = w.status === 'todo' ? 'in_progress' : w.status
+    appendOp(
+      { ts: new Date().toISOString(), actor: 'agent', work: id, op: 'status', from: w.status, to, binding },
+      path)
+  })
 }
 
 /**
