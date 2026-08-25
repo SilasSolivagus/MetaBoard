@@ -19,7 +19,12 @@
 export function describe(e) {
   if (e.source === 'board') {
     if (e.op === 'create') return `开工作项：${e.title}`
-    if (e.op === 'status') return `状态 ${e.from ?? '?'} → ${e.to}`
+    if (e.op === 'status') {
+      // 认领落在一条 from 与 to 相同、带着绑定的状态操作上(store/works.mjs 的 claim)。
+      // 照直印成「状态 in_progress → in_progress」等于一行没说话。
+      if (e.binding !== undefined && e.from === e.to) return `认领：会话 ${e.binding.session}`
+      return `状态 ${e.from ?? '?'} → ${e.to}`
+    }
     if (e.op === 'title') return `改名为：${e.to}`
     if (e.op === 'comment') return `${e.actor === 'agent' ? 'agent' : '你'}留言：${e.body}`
     if (e.op === 'archive') return '归档'

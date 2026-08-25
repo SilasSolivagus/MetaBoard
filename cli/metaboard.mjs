@@ -194,6 +194,13 @@ async function main(argv) {
     const events = await collectEvents(/** @type {string} */ (id))
     console.log(`${t.id}  ${t.title}`)
     console.log(`${STATUS_LABEL[t.status] ?? t.status}${t.archivedAt === undefined ? '' : '（已归档）'}   由 ${t.actor} 建立`)
+    if (t.binding !== undefined) {
+      // 认领是拒绝第二个对话的那道闸,可它一直没出现在任何界面上:会话中途死掉之后,
+      // 别的对话只会收到一句「被别的对话认领着(<会话 id>)」,而那个 id 人无处可查,
+      // 唯一的解法(随便挪一次状态)也没有任何地方写着。所以这里把它印出来,连解法一起。
+      console.log(`认领中：会话 ${t.binding.session}（${t.binding.workspace}）`)
+      console.log(`别的对话在它上面写会被拒。任意 metaboard status ${t.id} <状态> 都会解除认领。`)
+    }
     if (events.length === 0) {
       console.log('\n还没有会话记录。在 dsh 里用 metaboard 工具做事，这里就会出现。')
     }

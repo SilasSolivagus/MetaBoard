@@ -114,6 +114,12 @@ comment on, or refile a work item the other created.
 | `metaboard project archive <pid>` | Archive a project. Items assigned to it are unaffected. |
 | `metaboard doctor` | Check that the work-item log, the project log, and the dsh session store are all reachable. |
 
+A work item an agent is working on carries a **claim**: the conversation that wrote to it first.
+While the claim stands, every other conversation is refused — that is what stops two sessions
+from writing to one item. `metaboard show <id>` prints who holds it. Any `metaboard status
+<id> <status>` releases the claim, which is how you take an item back when its session died
+mid-way.
+
 ### dsh tools
 
 | Tool | What it does |

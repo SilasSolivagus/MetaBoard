@@ -9,7 +9,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -116,6 +116,28 @@ test('不在等你确认的工作项打不回', () => {
     s.run(['new', '活儿'])
     s.run(['approve', 't1'])
     assert.throws(() => s.run(['return', 't1', '理由']), /等你确认/)
+  } finally { s.cleanup() }
+})
+
+// 认领在界面上一直看不见:会话中途死掉之后,别的对话被拒的理由里带着一个
+// 会话 id,人无处可查;而唯一的解法(随便挪一次状态会顺带解除认领)也没有
+// 任何地方写着。show 得把它印出来。
+test('show 印出认领在谁手里,以及怎么解除', () => {
+  const s = box()
+  try {
+    s.run(['new', '活儿'])
+    s.run(['approve', 't1'])
+    // 直接把 agent 认领的那条状态操作写进日志 —— CLI 这一侧没有认领的入口。
+    appendFileSync(join(s.dir, 'works.jsonl'), JSON.stringify({
+      ts: new Date().toISOString(), actor: 'agent', work: 't1', op: 'status',
+      from: 'todo', to: 'in_progress', binding: { session: 'sess-A', workspace: '/tmp/w' },
+    }) + '\n')
+    const out = s.run(['show', 't1'])
+    assert.match(out, /sess-A/, '认领人没印出来')
+    assert.match(out, /metaboard status t1/, '解除认领的办法没写在旁边')
+    // 解除之后就不该再印了。
+    s.run(['status', 't1', 'in_progress'])
+    assert.doesNotMatch(s.run(['show', 't1']), /认领中/)
   } finally { s.cleanup() }
 })
 
